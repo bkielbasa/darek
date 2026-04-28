@@ -43,6 +43,8 @@ agent/          tool-calling loop
 llm/            OpenAI wrapper + cost calc
 tools/          tool interface + registry
 tools/calendar/ CalendarSource interface + Google + iCal sources
+tools/todoist/  Todoist REST client + tools
+tools/mail/     MailAccount interface, IMAP sync, mail tools
 memory/         Postgres-backed notes + recall/save tools
 obs/            OTEL setup, metrics, redactor, slog
 db/             pgx pool + embedded migrations
@@ -92,6 +94,39 @@ todoist:
 ```
 
 Get a token from <https://todoist.com/app/settings/integrations/developer>. Add it to `~/.darek/secrets.env`. Tools enabled: `todoist.list_tasks`, `todoist.create_task`, `todoist.complete_task`, `todoist.update_task`.
+
+## Mail
+
+Mail uses a hybrid sync model: envelopes (subject, from, date, snippet) are cached in Postgres, bodies and attachments are fetched live from IMAP on demand.
+
+### Configure
+
+```yaml
+mail:
+  attachments_dir: ~/.darek/attachments
+  attachment_ttl_days: 30
+  accounts:
+    - nickname: personal
+      email: me@example.com
+      imap: { host: imap.fastmail.com, port: 993, tls: true }
+      smtp: { host: smtp.fastmail.com, port: 465, tls: true }
+      username: me@example.com
+      secret_env: DAREK_MAIL_PERSONAL
+      sync_folders: [INBOX]
+```
+
+Add the IMAP password (an app-specific password, NOT your account password) to `~/.darek/secrets.env`.
+
+### Sync
+
+Periodic sync is invoked manually (cron suggested):
+
+```bash
+./darek mail sync                   # sync all accounts
+./darek mail sync --account=personal
+```
+
+Tools enabled in chat: `mail.search`, `mail.get_body`, `mail.get_attachment`. Sending mail is in Plan 5.
 
 ## Roadmap
 
