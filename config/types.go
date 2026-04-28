@@ -9,6 +9,7 @@ type Config struct {
 	Agent     Agent         `yaml:"agent"`
 	Memory    Memory        `yaml:"memory"`
 	Todoist   Todoist       `yaml:"todoist"`
+	FreshRSS  FreshRSS      `yaml:"freshrss"`
 	Calendars []CalendarSrc `yaml:"calendars"`
 	Mail      Mail          `yaml:"mail"`
 }
@@ -42,6 +43,12 @@ type Memory struct {
 
 type Todoist struct {
 	TokenEnv string `yaml:"token_env"`
+}
+
+type FreshRSS struct {
+	BaseURL     string `yaml:"base_url"`
+	Username    string `yaml:"username"`
+	PasswordEnv string `yaml:"password_env"`
 }
 
 type CalendarSrc struct {

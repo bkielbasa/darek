@@ -44,6 +44,7 @@ llm/            OpenAI wrapper + cost calc
 tools/          tool interface + registry
 tools/calendar/ CalendarSource interface + Google + iCal sources
 tools/todoist/  Todoist REST client + tools
+tools/freshrss/ GReader-protocol RSS client + tools
 tools/mail/     MailAccount interface, IMAP sync, mail tools
 memory/         Postgres-backed notes + recall/save tools
 obs/            OTEL setup, metrics, redactor, slog
@@ -94,6 +95,19 @@ todoist:
 ```
 
 Get a token from <https://todoist.com/app/settings/integrations/developer>. Add it to `~/.darek/secrets.env`. Tools enabled: `todoist.list_tasks`, `todoist.create_task`, `todoist.complete_task`, `todoist.update_task`.
+
+## FreshRSS
+
+Set `freshrss` in `~/.darek/config.yaml`:
+
+```yaml
+freshrss:
+  base_url: https://rss.example.com
+  username: alice
+  password_env: DAREK_FRESHRSS_PASSWORD
+```
+
+Use a FreshRSS **API password** (Settings → Profile → "API password"), not your account password. Tools enabled: `freshrss.list_articles`, `freshrss.get_article`, `freshrss.mark`.
 
 ## Mail
 

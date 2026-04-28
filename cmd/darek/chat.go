@@ -23,6 +23,7 @@ import (
 	mailimap "darek/tools/mail/imap"
 	mailsmtp "darek/tools/mail/smtp"
 	"darek/tools/todoist"
+	"darek/tools/freshrss"
 )
 
 func runChat(ctx context.Context, cfgPath, userInput string) error {
@@ -129,6 +130,29 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 				todoist.CreateTool{Client: tdc},
 				todoist.CompleteTool{Client: tdc},
 				todoist.UpdateTool{Client: tdc},
+			} {
+				if err := reg.Register(t); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	// FreshRSS
+	if cfg.FreshRSS.BaseURL != "" && cfg.FreshRSS.PasswordEnv != "" {
+		if pw, err := config.ResolveSecret("env:" + cfg.FreshRSS.PasswordEnv); err != nil {
+			logger.WarnContext(ctx, "skipping freshrss", "error", err.Error())
+		} else {
+			frc, err := freshrss.New(freshrss.Options{
+				BaseURL: cfg.FreshRSS.BaseURL, Username: cfg.FreshRSS.Username, Password: pw,
+			})
+			if err != nil {
+				return fmt.Errorf("freshrss: %w", err)
+			}
+			for _, t := range []tools.Tool{
+				freshrss.ListTool{Client: frc},
+				freshrss.GetTool{Client: frc},
+				freshrss.MarkTool{Client: frc},
 			} {
 				if err := reg.Register(t); err != nil {
 					return err

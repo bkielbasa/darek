@@ -22,6 +22,11 @@ memory:
 todoist:
   token_env: DAREK_TODOIST_TOKEN
 
+freshrss:
+  base_url: https://rss.example.com
+  username: alice
+  password_env: DAREK_FRESHRSS_PASSWORD
+
 calendars:
   - kind: ical
     nickname: family
