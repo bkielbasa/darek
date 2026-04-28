@@ -126,11 +126,13 @@ Periodic sync is invoked manually (cron suggested):
 ./darek mail sync --account=personal
 ```
 
-Tools enabled in chat: `mail.search`, `mail.get_body`, `mail.get_attachment`. Sending mail is in Plan 5.
+Tools enabled in chat: `mail.search`, `mail.get_body`, `mail.get_attachment`, `mail.send`. Sending prompts you to confirm (`y/N`) on stderr; the message is sent via SMTP and appended to your Sent folder via IMAP.
 
 ## Roadmap
 
-- Plan 2: Calendars (Google + iCal)
-- Plan 3: Todoist (read + write)
-- Plan 4: Mail receive (IMAP sync, search, body/attachment fetch)
-- Plan 5: Mail send (confirm-before-send, IMAP APPEND to Sent)
+All MVP plans (foundations, calendars, todoist, mail receive, mail send) shipped on `feat/foundations`. Future work:
+
+- CalDAV / Outlook calendar sources behind the existing `CalendarSource` interface
+- Mail HTML body rendering and a "deep search" tool that fetches bodies for top-K candidates
+- Proactive scheduled tasks (morning digest, etc.) once a service mode lands
+- ActualBudget integration (deferred from MVP)
