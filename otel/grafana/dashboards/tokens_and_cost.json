@@ -1,0 +1,35 @@
+{
+  "title": "darek — tokens & cost",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Input tokens/s by model",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (model) (rate(darek_tokens_input_total[1m]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Output tokens/s by model",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (model) (rate(darek_tokens_output_total[1m]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "USD spent (1h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_llm_cost_usd_total[1h]))"}],
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Cost rate by model",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (model) (rate(darek_llm_cost_usd_total[5m]))"}],
+      "gridPos": {"h": 8, "w": 18, "x": 6, "y": 8}
+    }
+  ]
+}
