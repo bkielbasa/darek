@@ -21,14 +21,18 @@ type ListTool struct{ Client API }
 
 func (ListTool) Name() string        { return "todoist.list_tasks" }
 func (ListTool) Description() string {
-	return `List Todoist tasks. "filter" accepts Todoist filter expressions: "today", "overdue", "tomorrow", "p1" (priority 1), etc.`
+	return `List Todoist tasks. The "filter" arg uses Todoist filter syntax — NOT plain English. ` +
+		`Common expressions: "today", "tomorrow", "overdue", "next 7 days", "no date", ` +
+		`"p1"/"p2"/"p3"/"p4" (priority), "#ProjectName" (tasks in a project — for the inbox use "#Inbox"), ` +
+		`"@labelname" (label), "assigned to: me". Combine with " & " (and) or " | " (or). ` +
+		`Omit "filter" entirely to list ALL tasks across every project.`
 }
 func (ListTool) JSONSchema() json.RawMessage {
 	return json.RawMessage(`{
 		"type":"object",
 		"properties":{
-			"filter":{"type":"string","description":"Todoist filter expression, e.g. today, overdue, p1"},
-			"project_id":{"type":"string"},
+			"filter":{"type":"string","description":"Todoist filter expression. Examples: '#Inbox', 'today', 'overdue', 'p1', '#Work & today', '@home'. Note: 'inbox' alone is NOT valid; use '#Inbox'."},
+			"project_id":{"type":"string","description":"only for known project ids; prefer 'filter' with #ProjectName"},
 			"label":{"type":"string"}
 		},
 		"required":[]
