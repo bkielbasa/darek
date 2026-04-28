@@ -18,3 +18,13 @@ agent:
 memory:
   pgvector: false
   embedding_model: text-embedding-3-small
+
+calendars:
+  - kind: ical
+    nickname: family
+    url: https://calendar.example.com/feed.ics
+  # - kind: google
+  #   nickname: personal
+  #   calendar_id: primary
+  #   client_id_env: DAREK_GCAL_CLIENT_ID
+  #   client_secret_env: DAREK_GCAL_CLIENT_SECRET

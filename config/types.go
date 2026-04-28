@@ -3,11 +3,12 @@ package config
 import "time"
 
 type Config struct {
-	OpenAI   OpenAI   `yaml:"openai"`
-	Postgres Postgres `yaml:"postgres"`
-	OTEL     OTEL     `yaml:"otel"`
-	Agent    Agent    `yaml:"agent"`
-	Memory   Memory   `yaml:"memory"`
+	OpenAI    OpenAI        `yaml:"openai"`
+	Postgres  Postgres      `yaml:"postgres"`
+	OTEL      OTEL          `yaml:"otel"`
+	Agent     Agent         `yaml:"agent"`
+	Memory    Memory        `yaml:"memory"`
+	Calendars []CalendarSrc `yaml:"calendars"`
 }
 
 type OpenAI struct {
@@ -35,4 +36,13 @@ type Agent struct {
 type Memory struct {
 	Pgvector       bool   `yaml:"pgvector"`
 	EmbeddingModel string `yaml:"embedding_model"`
+}
+
+type CalendarSrc struct {
+	Kind            string `yaml:"kind"`              // "google" | "ical"
+	Nickname        string `yaml:"nickname"`
+	URL             string `yaml:"url"`               // for ical
+	CalendarID      string `yaml:"calendar_id"`       // for google, default "primary"
+	ClientIDEnv     string `yaml:"client_id_env"`     // for google
+	ClientSecretEnv string `yaml:"client_secret_env"` // for google
 }

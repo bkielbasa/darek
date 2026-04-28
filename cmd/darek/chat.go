@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"darek/agent"
 	"darek/config"
@@ -14,6 +15,9 @@ import (
 	"darek/memory"
 	"darek/obs"
 	"darek/tools"
+	"darek/tools/calendar"
+	googlecal "darek/tools/calendar/google"
+	"darek/tools/calendar/ical"
 )
 
 func runChat(ctx context.Context, cfgPath, userInput string) error {
@@ -67,6 +71,43 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 	}
 	if err := reg.Register(memory.SaveTool{Store: store}); err != nil {
 		return err
+	}
+
+	// Calendar sources
+	if len(cfg.Calendars) > 0 {
+		srcs := calendar.NewSources()
+		home, _ := os.UserHomeDir()
+		store := googlecal.NewTokenStore(filepath.Join(home, ".darek", "oauth"))
+		for _, c := range cfg.Calendars {
+			switch c.Kind {
+			case "ical":
+				if err := srcs.Add(ical.New(c.Nickname, c.URL)); err != nil {
+					return fmt.Errorf("calendar %s: %w", c.Nickname, err)
+				}
+			case "google":
+				cid, err := config.ResolveSecret("env:" + c.ClientIDEnv)
+				if err != nil {
+					logger.WarnContext(ctx, "skipping google calendar", "nickname", c.Nickname, "error", err.Error())
+					continue
+				}
+				cs, err := config.ResolveSecret("env:" + c.ClientSecretEnv)
+				if err != nil {
+					logger.WarnContext(ctx, "skipping google calendar", "nickname", c.Nickname, "error", err.Error())
+					continue
+				}
+				oauthCfg := googlecal.Config(cid, cs)
+				if err := srcs.Add(googlecal.NewSource(c.Nickname, c.CalendarID, oauthCfg, store)); err != nil {
+					return fmt.Errorf("calendar %s: %w", c.Nickname, err)
+				}
+			default:
+				logger.WarnContext(ctx, "unknown calendar kind", "kind", c.Kind, "nickname", c.Nickname)
+			}
+		}
+		if len(srcs.Names()) > 0 {
+			if err := reg.Register(calendar.ListEventsTool{Sources: srcs}); err != nil {
+				return err
+			}
+		}
 	}
 
 	a, err := agent.New(agent.Options{
