@@ -20,7 +20,7 @@ func Start(t *testing.T) (dsn string, pool *pgxpool.Pool) {
 	defer cancel()
 
 	c, err := postgres.Run(ctx,
-		"postgres:16-alpine",
+		"pgvector/pgvector:pg16",
 		postgres.WithDatabase("darek"),
 		postgres.WithUsername("darek"),
 		postgres.WithPassword("darek"),
