@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"darek/agent"
 	"darek/config"
@@ -18,6 +19,8 @@ import (
 	"darek/tools/calendar"
 	googlecal "darek/tools/calendar/google"
 	"darek/tools/calendar/ical"
+	"darek/tools/mail"
+	mailimap "darek/tools/mail/imap"
 	"darek/tools/todoist"
 )
 
@@ -133,6 +136,34 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 		}
 	}
 
+	// Mail tools
+	if len(cfg.Mail.Accounts) > 0 {
+		mstore := mail.NewStore(pool)
+		resolver := mailAccountResolver{}
+		for _, ac := range cfg.Mail.Accounts {
+			secret, err := config.ResolveSecret("env:" + ac.SecretEnv)
+			if err != nil {
+				logger.WarnContext(ctx, "skipping mail account", "nickname", ac.Nickname, "error", err.Error())
+				continue
+			}
+			resolver[ac.Nickname] = mailimap.New(mailimap.Options{
+				Nickname: ac.Nickname, Email: ac.Email,
+				Host: ac.IMAP.Host, Port: ac.IMAP.Port, TLS: ac.IMAP.TLS,
+				Username: ac.Username, Password: secret,
+			})
+		}
+		attDir := expandHomeChat(cfg.Mail.AttachmentsDir)
+		for _, t := range []tools.Tool{
+			mail.SearchTool{Store: mstore},
+			mail.GetBodyTool{Store: mstore, Accounts: resolver},
+			mail.GetAttachmentTool{Store: mstore, Accounts: resolver, AttachmentsDir: attDir},
+		} {
+			if err := reg.Register(t); err != nil {
+				return err
+			}
+		}
+	}
+
 	a, err := agent.New(agent.Options{
 		LLM: llmClient, Tools: reg, MaxIterations: cfg.Agent.MaxIterations,
 	})
@@ -172,4 +203,19 @@ func readStdin() (string, error) {
 		b = append(b, '\n')
 	}
 	return string(b), sc.Err()
+}
+
+type mailAccountResolver map[string]mail.MailAccount
+
+func (m mailAccountResolver) ByNickname(n string) (mail.MailAccount, bool) {
+	a, ok := m[n]
+	return a, ok
+}
+
+func expandHomeChat(p string) string {
+	if strings.HasPrefix(p, "~/") {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, p[2:])
+	}
+	return p
 }

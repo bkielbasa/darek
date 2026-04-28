@@ -31,3 +31,15 @@ calendars:
   #   calendar_id: primary
   #   client_id_env: DAREK_GCAL_CLIENT_ID
   #   client_secret_env: DAREK_GCAL_CLIENT_SECRET
+
+mail:
+  attachments_dir: ~/.darek/attachments
+  attachment_ttl_days: 30
+  accounts:
+    - nickname: personal
+      email: me@example.com
+      imap: { host: imap.fastmail.com, port: 993, tls: true }
+      smtp: { host: smtp.fastmail.com, port: 465, tls: true }
+      username: me@example.com
+      secret_env: DAREK_MAIL_PERSONAL
+      sync_folders: [INBOX]

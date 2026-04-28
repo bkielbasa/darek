@@ -10,6 +10,7 @@ type Config struct {
 	Memory    Memory        `yaml:"memory"`
 	Todoist   Todoist       `yaml:"todoist"`
 	Calendars []CalendarSrc `yaml:"calendars"`
+	Mail      Mail          `yaml:"mail"`
 }
 
 type OpenAI struct {
@@ -50,4 +51,32 @@ type CalendarSrc struct {
 	CalendarID      string `yaml:"calendar_id"`       // for google, default "primary"
 	ClientIDEnv     string `yaml:"client_id_env"`     // for google
 	ClientSecretEnv string `yaml:"client_secret_env"` // for google
+}
+
+type Mail struct {
+	AttachmentsDir    string           `yaml:"attachments_dir"`
+	AttachmentTTLDays int              `yaml:"attachment_ttl_days"`
+	Accounts          []MailAccountCfg `yaml:"accounts"`
+}
+
+type MailIMAP struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+	TLS  bool   `yaml:"tls"`
+}
+
+type MailSMTP struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+	TLS  bool   `yaml:"tls"`
+}
+
+type MailAccountCfg struct {
+	Nickname    string   `yaml:"nickname"`
+	Email       string   `yaml:"email"`
+	IMAP        MailIMAP `yaml:"imap"`
+	SMTP        MailSMTP `yaml:"smtp"`
+	Username    string   `yaml:"username"`
+	SecretEnv   string   `yaml:"secret_env"`
+	SyncFolders []string `yaml:"sync_folders"`
 }
