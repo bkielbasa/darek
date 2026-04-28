@@ -21,6 +21,7 @@ import (
 	"darek/tools/calendar/ical"
 	"darek/tools/mail"
 	mailimap "darek/tools/mail/imap"
+	mailsmtp "darek/tools/mail/smtp"
 	"darek/tools/todoist"
 )
 
@@ -162,6 +163,39 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 				return err
 			}
 		}
+
+		// Send tool: build per-account SendDeps from SMTP + IMAP append capability.
+		sendResolver := mailSendResolver{}
+		for _, ac := range cfg.Mail.Accounts {
+			secret, err := config.ResolveSecret("env:" + ac.SecretEnv)
+			if err != nil {
+				continue // already warned above
+			}
+			imapAcc, ok := resolver[ac.Nickname]
+			if !ok {
+				continue
+			}
+			var sndr mail.Sender
+			if ac.SMTP.Host != "" {
+				sndr = mailsmtp.New(mailsmtp.Options{
+					Host: ac.SMTP.Host, Port: ac.SMTP.Port, TLS: ac.SMTP.TLS,
+					Username: ac.Username, Password: secret,
+				})
+			}
+			var app mail.Appender
+			if ia, ok := imapAcc.(*mailimap.Account); ok {
+				app = ia
+			}
+			sendResolver[ac.Nickname] = mail.SendDeps{
+				From: ac.Email, SMTP: sndr, Appender: app,
+				SentFolder: "Sent", Hostname: "darek.local",
+			}
+		}
+		if err := reg.Register(mail.SendTool{
+			Store: mstore, Accounts: sendResolver, Confirm: mail.NewCLIConfirmer(),
+		}); err != nil {
+			return err
+		}
 	}
 
 	a, err := agent.New(agent.Options{
@@ -210,6 +244,13 @@ type mailAccountResolver map[string]mail.MailAccount
 func (m mailAccountResolver) ByNickname(n string) (mail.MailAccount, bool) {
 	a, ok := m[n]
 	return a, ok
+}
+
+type mailSendResolver map[string]mail.SendDeps
+
+func (m mailSendResolver) SendDepsFor(n string) (mail.SendDeps, bool) {
+	d, ok := m[n]
+	return d, ok
 }
 
 func expandHomeChat(p string) string {
