@@ -38,15 +38,16 @@ Open Jaeger at <http://localhost:16686>.
 ## Layout
 
 ```
-cmd/darek/  CLI entry
-agent/      tool-calling loop
-llm/        OpenAI wrapper + cost calc
-tools/      tool interface + registry
-memory/     Postgres-backed notes + recall/save tools
-obs/        OTEL setup, metrics, redactor, slog
-db/         pgx pool + embedded migrations
-config/     YAML loader + secret resolver
-otel/       collector, prom, grafana provisioning
+cmd/darek/      CLI entry
+agent/          tool-calling loop
+llm/            OpenAI wrapper + cost calc
+tools/          tool interface + registry
+tools/calendar/ CalendarSource interface + Google + iCal sources
+memory/         Postgres-backed notes + recall/save tools
+obs/            OTEL setup, metrics, redactor, slog
+db/             pgx pool + embedded migrations
+config/         YAML loader + secret resolver
+otel/           collector, prom, grafana provisioning
 ```
 
 ## Make targets
@@ -56,6 +57,30 @@ otel/       collector, prom, grafana provisioning
 - `make test-integration` — run with `-tags=integration` (needs Docker)
 - `make up` / `make down` — Postgres
 - `make obs-up` / `make obs-down` — OTEL Collector + Jaeger + Prom + Grafana
+
+## Calendars
+
+Calendars are read-only. Add sources to `~/.darek/config.yaml`:
+
+```yaml
+calendars:
+  - kind: ical
+    nickname: family
+    url: https://calendar.example.com/feed.ics
+  - kind: google
+    nickname: personal
+    calendar_id: primary  # or a specific calendar id
+    client_id_env: DAREK_GCAL_CLIENT_ID
+    client_secret_env: DAREK_GCAL_CLIENT_SECRET
+```
+
+For Google calendars, run the OAuth flow once per nickname:
+
+```bash
+./darek calendar refresh-token personal
+```
+
+The CLI prints an auth URL; visit it, paste back the code, the token is saved to `~/.darek/oauth/<nickname>.json`.
 
 ## Roadmap
 
