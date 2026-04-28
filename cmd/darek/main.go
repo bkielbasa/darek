@@ -38,9 +38,11 @@ func run() error {
 		return runMigrate(ctx, cfgPath)
 	case "doctor":
 		return runDoctor(ctx, cfgPath)
+	case "calendar":
+		return runCalendar(ctx, cfgPath, args)
 	case "", "chat":
 		return runChat(ctx, cfgPath, strings.Join(args, " "))
 	default:
-		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor)", cmd)
+		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar)", cmd)
 	}
 }
