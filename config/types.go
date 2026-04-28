@@ -8,6 +8,7 @@ type Config struct {
 	OTEL      OTEL          `yaml:"otel"`
 	Agent     Agent         `yaml:"agent"`
 	Memory    Memory        `yaml:"memory"`
+	Todoist   Todoist       `yaml:"todoist"`
 	Calendars []CalendarSrc `yaml:"calendars"`
 }
 
@@ -36,6 +37,10 @@ type Agent struct {
 type Memory struct {
 	Pgvector       bool   `yaml:"pgvector"`
 	EmbeddingModel string `yaml:"embedding_model"`
+}
+
+type Todoist struct {
+	TokenEnv string `yaml:"token_env"`
 }
 
 type CalendarSrc struct {

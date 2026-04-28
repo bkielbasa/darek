@@ -19,6 +19,9 @@ memory:
   pgvector: false
   embedding_model: text-embedding-3-small
 
+todoist:
+  token_env: DAREK_TODOIST_TOKEN
+
 calendars:
   - kind: ical
     nickname: family

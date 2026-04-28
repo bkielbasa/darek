@@ -82,6 +82,17 @@ For Google calendars, run the OAuth flow once per nickname:
 
 The CLI prints an auth URL; visit it, paste back the code, the token is saved to `~/.darek/oauth/<nickname>.json`.
 
+## Todoist
+
+Set `todoist.token_env` in `~/.darek/config.yaml`:
+
+```yaml
+todoist:
+  token_env: DAREK_TODOIST_TOKEN
+```
+
+Get a token from <https://todoist.com/app/settings/integrations/developer>. Add it to `~/.darek/secrets.env`. Tools enabled: `todoist.list_tasks`, `todoist.create_task`, `todoist.complete_task`, `todoist.update_task`.
+
 ## Roadmap
 
 - Plan 2: Calendars (Google + iCal)

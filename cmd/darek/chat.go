@@ -18,6 +18,7 @@ import (
 	"darek/tools/calendar"
 	googlecal "darek/tools/calendar/google"
 	"darek/tools/calendar/ical"
+	"darek/tools/todoist"
 )
 
 func runChat(ctx context.Context, cfgPath, userInput string) error {
@@ -106,6 +107,28 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 		if len(srcs.Names()) > 0 {
 			if err := reg.Register(calendar.ListEventsTool{Sources: srcs}); err != nil {
 				return err
+			}
+		}
+	}
+
+	// Todoist
+	if cfg.Todoist.TokenEnv != "" {
+		if tok, err := config.ResolveSecret("env:" + cfg.Todoist.TokenEnv); err != nil {
+			logger.WarnContext(ctx, "skipping todoist", "error", err.Error())
+		} else {
+			tdc, err := todoist.New(todoist.Options{Token: tok})
+			if err != nil {
+				return fmt.Errorf("todoist: %w", err)
+			}
+			for _, t := range []tools.Tool{
+				todoist.ListTool{Client: tdc},
+				todoist.CreateTool{Client: tdc},
+				todoist.CompleteTool{Client: tdc},
+				todoist.UpdateTool{Client: tdc},
+			} {
+				if err := reg.Register(t); err != nil {
+					return err
+				}
 			}
 		}
 	}
