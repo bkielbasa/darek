@@ -17,7 +17,7 @@ func TestMigrate_CreatesNotesAndTurns(t *testing.T) {
 
 	var n int
 	require.NoError(t, pool.QueryRow(context.Background(),
-		`SELECT count(*) FROM information_schema.tables WHERE table_name IN ('notes','turns','messages')`,
+		`SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('notes','turns','messages')`,
 	).Scan(&n))
 	require.Equal(t, 3, n)
 }

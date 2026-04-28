@@ -4,7 +4,6 @@ package pg
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -28,15 +27,17 @@ func Start(t *testing.T) (dsn string, pool *pgxpool.Pool) {
 		testcontainers.WithWaitStrategy(wait.ForLog("database system is ready to accept connections").WithOccurrence(2).WithStartupTimeout(60*time.Second)),
 	)
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = c.Terminate(context.Background()) })
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = c.Terminate(ctx)
+	})
 
 	dsn, err = c.ConnectionString(ctx, "sslmode=disable")
 	require.NoError(t, err)
 	pool, err = pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
-	if err := pool.Ping(ctx); err != nil {
-		t.Fatal(fmt.Errorf("ping: %w", err))
-	}
+	require.NoError(t, pool.Ping(ctx), "ping")
 	return dsn, pool
 }

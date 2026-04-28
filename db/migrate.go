@@ -23,7 +23,6 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	// pool.Close() if the migration driver does not release cleanly.
 	connCfg := pool.Config().ConnConfig
 	db := stdlib.OpenDB(*connCfg)
-	defer db.Close()
 
 	driver, err := pgxmigrate.WithInstance(db, &pgxmigrate.Config{})
 	if err != nil {
@@ -41,6 +40,7 @@ func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	if err != nil {
 		return fmt.Errorf("migrate new: %w", err)
 	}
+	defer func() { _, _ = m.Close() }()
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("migrate up: %w", err)
 	}

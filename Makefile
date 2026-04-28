@@ -9,6 +9,8 @@ build:
 test:
 	$(GO) test ./...
 
+# OrbStack's Docker context does not run Ryuk's reaper container reliably;
+# disable it for integration tests. t.Cleanup handles container teardown.
 test-integration:
 	TESTCONTAINERS_RYUK_DISABLED=true $(GO) test -tags=integration -count=1 ./...
 

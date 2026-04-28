@@ -14,7 +14,7 @@ CREATE TABLE notes (
     tags        text[] NOT NULL DEFAULT '{}',
     source      text NOT NULL DEFAULT 'user',
     search      tsvector GENERATED ALWAYS AS (
-        to_tsvector('simple'::regconfig, coalesce(body, '') || ' ' || coalesce(immutable_array_to_string(tags, ' '), ''))
+        to_tsvector('simple'::regconfig, body || ' ' || immutable_array_to_string(tags, ' '))
     ) STORED
 );
 CREATE INDEX notes_search_gin ON notes USING gin(search);
