@@ -1,11 +1,65 @@
 # darek
 
-Personal-assistant CLI. Talks to OpenAI, remembers things in Postgres, fully observable.
+A Go personal-assistant CLI. Talks to OpenAI, remembers things in Postgres, fully observable.
+First plan ships **memory only** — calendars, Todoist, mail land in subsequent plans.
 
 ## Quickstart
 
-(populated in Task 13)
+```bash
+# 1. Spin up Postgres + observability stack
+make up
+make obs-up
+
+# 2. Configure
+mkdir -p ~/.darek
+cp config/testdata/config.example.yaml ~/.darek/config.yaml
+cat > ~/.darek/secrets.env <<'EOF'
+DAREK_OPENAI_API_KEY=sk-...
+DAREK_POSTGRES_URL=postgres://darek:darek@localhost:5432/darek?sslmode=disable
+EOF
+chmod 600 ~/.darek/secrets.env
+
+# 3. Build & migrate
+make build
+set -a; source ~/.darek/secrets.env; set +a
+./darek migrate
+
+# 4. Health check
+./darek doctor
+
+# 5. Talk to it
+./darek "remember I'm tracking a Berlin trip in May"
+./darek "what trips am I tracking?"
+```
+
+Open Grafana at <http://localhost:3000> (anonymous admin) and look at the `darek` folder.
+Open Jaeger at <http://localhost:16686>.
 
 ## Layout
 
-(populated in Task 13)
+```
+cmd/darek/  CLI entry
+agent/      tool-calling loop
+llm/        OpenAI wrapper + cost calc
+tools/      tool interface + registry
+memory/     Postgres-backed notes + recall/save tools
+obs/        OTEL setup, metrics, redactor, slog
+db/         pgx pool + embedded migrations
+config/     YAML loader + secret resolver
+otel/       collector, prom, grafana provisioning
+```
+
+## Make targets
+
+- `make build` — build the CLI
+- `make test` — unit tests
+- `make test-integration` — run with `-tags=integration` (needs Docker)
+- `make up` / `make down` — Postgres
+- `make obs-up` / `make obs-down` — OTEL Collector + Jaeger + Prom + Grafana
+
+## Roadmap
+
+- Plan 2: Calendars (Google + iCal)
+- Plan 3: Todoist (read + write)
+- Plan 4: Mail receive (IMAP sync, search, body/attachment fetch)
+- Plan 5: Mail send (confirm-before-send, IMAP APPEND to Sent)
