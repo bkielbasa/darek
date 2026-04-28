@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"darek/llm"
@@ -70,7 +71,7 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 		openai.SystemMessage(system),
 		openai.UserMessage(userInput),
 	}
-	toolDefs := buildToolParams(a.tools.OpenAIToolDefs())
+	toolDefs, nameMap := buildToolParams(a.tools.OpenAIToolDefs())
 
 	var (
 		final string
@@ -97,7 +98,11 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 		// that includes the tool_calls list — required so the model sees its own tool invocations.
 		msgs = append(msgs, msg.ToParam())
 		for _, tc := range msg.ToolCalls {
-			result, err := a.tools.Execute(ctx, tc.Function.Name, json.RawMessage(tc.Function.Arguments))
+			origName := nameMap[tc.Function.Name]
+			if origName == "" {
+				origName = tc.Function.Name
+			}
+			result, err := a.tools.Execute(ctx, origName, json.RawMessage(tc.Function.Arguments))
 			payload := result
 			if err != nil {
 				payload = fmt.Sprintf("error: %s", err.Error())
@@ -122,18 +127,19 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 }
 
 // buildToolParams converts the registry's generic tool defs into typed OpenAI params.
-// In v1.12.0:
-//   - FunctionDefinitionParam.Name is a plain string (not param.Opt).
-//   - FunctionDefinitionParam.Description is param.Opt[string], constructed via openai.String().
-//   - FunctionDefinitionParam.Parameters is openai.FunctionParameters (= map[string]any).
-//   - ChatCompletionToolParam.Type is constant.Function; it serialises to "function" automatically
-//     when left as zero value, so no explicit assignment is needed.
-func buildToolParams(defs []map[string]any) []openai.ChatCompletionToolParam {
+// Tool names are sanitized to match OpenAI's required pattern (^[a-zA-Z0-9_-]+$); a
+// reverse map of sanitized→original is returned so the loop can dispatch tool calls
+// back to the registry by their canonical name.
+func buildToolParams(defs []map[string]any) ([]openai.ChatCompletionToolParam, map[string]string) {
 	out := make([]openai.ChatCompletionToolParam, 0, len(defs))
+	nameMap := make(map[string]string, len(defs))
 	for _, d := range defs {
 		fn := d["function"].(map[string]any)
+		orig := fn["name"].(string)
+		sanitized := sanitizeToolName(orig)
+		nameMap[sanitized] = orig
 		params := openai.FunctionDefinitionParam{
-			Name:        fn["name"].(string),
+			Name:        sanitized,
 			Description: openai.String(fn["description"].(string)),
 			Parameters:  openai.FunctionParameters(fn["parameters"].(map[string]any)),
 		}
@@ -141,5 +147,24 @@ func buildToolParams(defs []map[string]any) []openai.ChatCompletionToolParam {
 			Function: params,
 		})
 	}
-	return out
+	return out, nameMap
+}
+
+// sanitizeToolName replaces any character outside [a-zA-Z0-9_-] with '_' so the
+// name satisfies OpenAI's tools[].function.name pattern.
+func sanitizeToolName(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
 }
