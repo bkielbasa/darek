@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const defaultBaseURL = "https://api.todoist.com/rest/v2"
+const defaultBaseURL = "https://api.todoist.com/api/v1"
 
 type Client struct {
 	base  string
@@ -21,7 +21,7 @@ type Client struct {
 
 type Options struct {
 	Token   string
-	BaseURL string        // optional; defaults to https://api.todoist.com/rest/v2
+	BaseURL string        // optional; defaults to https://api.todoist.com/api/v1
 	Timeout time.Duration // optional; defaults to 30s
 }
 
@@ -66,10 +66,19 @@ type ListFilter struct {
 	Label     string
 }
 
+// listEnvelope is the v1 paginated response wrapper.
+type listEnvelope struct {
+	Results    []Task `json:"results"`
+	NextCursor string `json:"next_cursor,omitempty"`
+}
+
 func (c *Client) ListTasks(ctx context.Context, f ListFilter) ([]Task, error) {
 	q := url.Values{}
+	path := "/tasks"
 	if f.Filter != "" {
-		q.Set("filter", f.Filter)
+		// v1 dedicated filter endpoint takes the Todoist filter expression as `query`.
+		path = "/tasks/filter"
+		q.Set("query", f.Filter)
 	}
 	if f.ProjectID != "" {
 		q.Set("project_id", f.ProjectID)
@@ -77,11 +86,11 @@ func (c *Client) ListTasks(ctx context.Context, f ListFilter) ([]Task, error) {
 	if f.Label != "" {
 		q.Set("label", f.Label)
 	}
-	var out []Task
-	if err := c.doJSON(ctx, http.MethodGet, "/tasks?"+q.Encode(), nil, &out); err != nil {
+	var env listEnvelope
+	if err := c.doJSON(ctx, http.MethodGet, path+"?"+q.Encode(), nil, &env); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return env.Results, nil
 }
 
 type CreateRequest struct {

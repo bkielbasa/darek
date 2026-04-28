@@ -20,18 +20,29 @@ func newServer(t *testing.T, h http.HandlerFunc) (*Client, *httptest.Server) {
 	return c, srv
 }
 
-func TestListTasks(t *testing.T) {
+func TestListTasks_WithFilter_UsesFilterEndpoint(t *testing.T) {
 	c, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
-		require.Equal(t, "/tasks", r.URL.Path)
-		require.Equal(t, "today", r.URL.Query().Get("filter"))
+		require.Equal(t, "/tasks/filter", r.URL.Path)
+		require.Equal(t, "today", r.URL.Query().Get("query"))
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`[{"id":"1","content":"Buy milk","priority":3}]`))
+		_, _ = w.Write([]byte(`{"results":[{"id":"1","content":"Buy milk","priority":3}],"next_cursor":null}`))
 	})
 	got, err := c.ListTasks(context.Background(), ListFilter{Filter: "today"})
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	require.Equal(t, "Buy milk", got[0].Content)
+}
+
+func TestListTasks_NoFilter_UsesPlainTasks(t *testing.T) {
+	c, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/tasks", r.URL.Path)
+		require.Empty(t, r.URL.Query().Get("query"))
+		_, _ = w.Write([]byte(`{"results":[{"id":"2","content":"X"}]}`))
+	})
+	got, err := c.ListTasks(context.Background(), ListFilter{})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
 }
 
 func TestCreateTask(t *testing.T) {
