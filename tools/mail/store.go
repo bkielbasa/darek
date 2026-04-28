@@ -259,3 +259,21 @@ func (s *Store) AttachmentByID(ctx context.Context, attID uuid.UUID) (uuid.UUID,
 	}
 	return msgID, meta, nil
 }
+
+type MessageRef struct {
+	MessageID  string
+	Subject    string
+	References []string
+}
+
+func (s *Store) LookupMessageRef(ctx context.Context, id uuid.UUID) (MessageRef, error) {
+	var r MessageRef
+	err := s.pool.QueryRow(ctx, `
+		SELECT message_id, subject, "references"
+		FROM mail_messages WHERE id = $1
+	`, id).Scan(&r.MessageID, &r.Subject, &r.References)
+	if err != nil {
+		return MessageRef{}, fmt.Errorf("lookup ref %s: %w", id, err)
+	}
+	return r, nil
+}
