@@ -7,6 +7,7 @@ import (
 
 	"darek/tools/calendar"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	calsvc "google.golang.org/api/calendar/v3"
@@ -49,6 +50,8 @@ func (s *Source) ListEvents(ctx context.Context, from, to time.Time) ([]calendar
 		return nil, fmt.Errorf("load token: %w", err)
 	}
 	httpClient := s.cfg.Client(ctx, tok)
+	// Wrap the OAuth2 transport so each Google API request is traced.
+	httpClient.Transport = otelhttp.NewTransport(httpClient.Transport)
 	svc, err := calsvc.NewService(ctx, option.WithHTTPClient(httpClient))
 	if err != nil {
 		return nil, fmt.Errorf("calendar svc: %w", err)

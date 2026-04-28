@@ -9,6 +9,7 @@ import (
 	"darek/tools/calendar"
 
 	ics "github.com/arran4/golang-ical"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 type Source struct {
@@ -18,7 +19,14 @@ type Source struct {
 }
 
 func New(nickname, url string) *Source {
-	return &Source{nickname: nickname, url: url, client: &http.Client{Timeout: 30 * time.Second}}
+	return &Source{
+		nickname: nickname,
+		url:      url,
+		client: &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
+	}
 }
 
 func (s *Source) Nickname() string { return s.nickname }

@@ -22,7 +22,7 @@ type fakeSender struct {
 	err  error
 }
 
-func (f *fakeSender) Send(from string, rcpt []string, raw []byte) error {
+func (f *fakeSender) Send(_ context.Context, from string, rcpt []string, raw []byte) error {
 	f.from = from
 	f.rcpt = rcpt
 	f.raw = raw

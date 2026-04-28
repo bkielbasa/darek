@@ -10,7 +10,7 @@ import (
 
 // Sender is the SMTP-side dependency the tool needs.
 type Sender interface {
-	Send(from string, recipients []string, raw []byte) error
+	Send(ctx context.Context, from string, recipients []string, raw []byte) error
 }
 
 // Appender is the IMAP-side dependency for writing to Sent. May be nil to skip.
@@ -142,7 +142,7 @@ func (st SendTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	allRcpts := append([]string{}, p.To...)
 	allRcpts = append(allRcpts, p.Cc...)
 	allRcpts = append(allRcpts, p.Bcc...)
-	if err := deps.SMTP.Send(deps.From, allRcpts, built.Bytes); err != nil {
+	if err := deps.SMTP.Send(ctx, deps.From, allRcpts, built.Bytes); err != nil {
 		return "", fmt.Errorf("smtp send: %w", err)
 	}
 

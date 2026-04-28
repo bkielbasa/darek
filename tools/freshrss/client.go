@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Stream IDs in the GReader protocol.
@@ -48,7 +50,10 @@ func New(opt Options) (*Client, error) {
 		base:     strings.TrimRight(opt.BaseURL, "/"),
 		username: opt.Username,
 		password: opt.Password,
-		http:     &http.Client{Timeout: opt.Timeout},
+		http: &http.Client{
+			Timeout:   opt.Timeout,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
 	}, nil
 }
 

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const defaultBaseURL = "https://api.todoist.com/api/v1"
@@ -38,7 +40,10 @@ func New(opt Options) (*Client, error) {
 	return &Client{
 		base:  opt.BaseURL,
 		token: opt.Token,
-		http:  &http.Client{Timeout: opt.Timeout},
+		http: &http.Client{
+			Timeout:   opt.Timeout,
+			Transport: otelhttp.NewTransport(http.DefaultTransport),
+		},
 	}, nil
 }
 
