@@ -91,7 +91,7 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 		return err
 	}
 	fmt.Println(res.Output)
-	logger.Info("turn complete", "iterations", res.Iterations)
+	logger.InfoContext(ctx, "turn complete", "iterations", res.Iterations)
 	return nil
 }
 
