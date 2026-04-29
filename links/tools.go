@@ -44,13 +44,37 @@ func (st SaveTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	if err := json.Unmarshal(args, &p); err != nil {
 		return "", fmt.Errorf("parse args: %w", err)
 	}
-	id, err := st.Store.Save(ctx, SaveInput{
-		URL: p.URL, Title: p.Title, Rating: p.Rating, Tags: p.Tags,
-		Notes: p.Notes, ReplaceTags: p.ReplaceTags, Source: p.Source,
+
+	source := p.Source
+	if source == "" {
+		source = "user"
+	}
+
+	// 1) Canonicalize + classify + upsert via the shared pipeline.
+	id, _, err := IngestOne(ctx, st.Store, Candidate{
+		URL:    p.URL,
+		Title:  p.Title,
+		Source: source,
 	})
 	if err != nil {
 		return "", err
 	}
+
+	// 2) Apply rating/tags/notes via Save's merge semantics. Re-fetch the
+	//    canonical URL so Save matches the row from step 1.
+	canon := Canonicalize(p.URL)
+	if _, err := st.Store.Save(ctx, SaveInput{
+		URL:         canon,
+		Title:       p.Title,
+		Rating:      p.Rating,
+		Tags:        p.Tags,
+		Notes:       p.Notes,
+		ReplaceTags: p.ReplaceTags,
+		Source:      source,
+	}); err != nil {
+		return "", err
+	}
+
 	rating := "unrated"
 	if p.Rating != nil {
 		rating = fmt.Sprintf("rating=%d", *p.Rating)
