@@ -99,3 +99,11 @@ func MetricsInstance() (*Metrics, error) {
 	})
 	return metricsInst, metricsErr
 }
+
+// ResetMetricsForTest forces MetricsInstance to rebuild against the current
+// global meter provider on its next call. NOT for production use.
+func ResetMetricsForTest() {
+	metricsOnce = sync.Once{}
+	metricsInst = nil
+	metricsErr = nil
+}
