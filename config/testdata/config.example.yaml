@@ -24,6 +24,7 @@ links:
 
 todoist:
   token_env: DAREK_TODOIST_TOKEN
+  sync_interval: 15m       # how often the in-server loop polls (0 disables)
 
 freshrss:
   base_url: https://rss.example.com

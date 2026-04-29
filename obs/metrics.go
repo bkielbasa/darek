@@ -45,6 +45,9 @@ type Metrics struct {
 
 	// AI analyze
 	LinksAnalyze metric.Int64Counter
+
+	// Todoist source
+	TodoistSyncDuration metric.Float64Histogram
 }
 
 var (
@@ -104,6 +107,7 @@ func MetricsInstance() (*Metrics, error) {
 			LinksIngest:            i64(m.Int64Counter("darek.links.ingest")),
 			FreshRSSSyncDuration:   f64hist(m.Float64Histogram("darek.freshrss.sync_duration", metric.WithUnit("s"))),
 			LinksAnalyze:           i64(m.Int64Counter("darek.links.analyze")),
+			TodoistSyncDuration:    f64hist(m.Float64Histogram("darek.todoist.sync_duration", metric.WithUnit("s"))),
 		}
 		metricsErr = err
 	})

@@ -32,4 +32,5 @@ func TestMetricsInstance_HasNewInstruments(t *testing.T) {
 	require.NotNil(t, m.LinksIngest, "LinksIngest not initialized")
 	require.NotNil(t, m.FreshRSSSyncDuration, "FreshRSSSyncDuration not initialized")
 	require.NotNil(t, m.LinksAnalyze, "LinksAnalyze not initialized")
+	require.NotNil(t, m.TodoistSyncDuration, "TodoistSyncDuration not initialized")
 }
