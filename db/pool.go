@@ -38,12 +38,11 @@ func Open(ctx context.Context, dsn string) (*Pool, error) {
 		inner.Close()
 		return nil, fmt.Errorf("ping: %w", err)
 	}
-	m, err := obs.MetricsInstance()
-	if err != nil {
-		inner.Close()
-		return nil, fmt.Errorf("metrics: %w", err)
+	pool := &Pool{inner: inner}
+	if m, err := obs.MetricsInstance(); err == nil {
+		pool.m = m
 	}
-	return &Pool{inner: inner, m: m}, nil
+	return pool, nil
 }
 
 func (p *Pool) Close() { p.inner.Close() }
@@ -57,6 +56,9 @@ func (p *Pool) Inner() *pgxpool.Pool { return p.inner }
 func (p *Pool) Stat() *pgxpool.Stat { return p.inner.Stat() }
 
 func (p *Pool) record(ctx context.Context, op string, start time.Time, err error) {
+	if p.m == nil {
+		return
+	}
 	dur := time.Since(start).Seconds()
 	outcome := "ok"
 	if err != nil {
