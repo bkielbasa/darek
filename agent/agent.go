@@ -65,6 +65,11 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 	)
 	defer span.End()
 	start := time.Now()
+	outcome := "ok"
+	defer func() {
+		a.m.TurnDuration.Record(ctx, time.Since(start).Seconds(),
+			metric.WithAttributes(attribute.String("outcome", outcome)))
+	}()
 
 	system := BuildSystemPrompt(time.Now(), a.tools.Names())
 	msgs := []openai.ChatCompletionMessageParamUnion{
@@ -84,6 +89,7 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 		}
 		resp, err := a.llm.Chat(ctx, params)
 		if err != nil {
+			outcome = "error"
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			return nil, fmt.Errorf("llm: %w", err)
@@ -113,6 +119,7 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 	}
 
 	if iters == a.maxIters {
+		outcome = "error"
 		a.m.AgentMaxItersHit.Add(ctx, 1)
 		err := fmt.Errorf("hit max iterations (%d) without final answer", a.maxIters)
 		span.RecordError(err)
@@ -120,8 +127,6 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 		return nil, err
 	}
 
-	dur := time.Since(start).Seconds()
-	a.m.TurnDuration.Record(ctx, dur, metric.WithAttributes(attribute.String("outcome", "ok")))
 	a.m.TurnIters.Record(ctx, int64(iters+1))
 	span.SetAttributes(attribute.Int("iterations", iters+1))
 	return &TurnResult{Output: final, Iterations: iters + 1}, nil
