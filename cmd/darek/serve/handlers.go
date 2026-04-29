@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"darek/links"
@@ -195,5 +196,52 @@ func (s *Server) handleList(queueOnly bool) http.HandlerFunc {
 		if err := s.tmpl.ExecuteTemplate(w, "index.html", vm); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+	}
+}
+
+// handleTags adds or removes tags from a link and returns the re-rendered tags widget.
+func (s *Server) handleTags(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	tag := strings.TrimSpace(strings.ToLower(r.FormValue("tag")))
+	op := r.FormValue("op")
+	if tag == "" {
+		http.Error(w, "tag required", http.StatusBadRequest)
+		return
+	}
+
+	switch op {
+	case "add":
+		_, err = s.store.Pool().Exec(r.Context(),
+			`UPDATE links
+			   SET tags = ARRAY(SELECT DISTINCT unnest(tags || $2::text[])),
+			       updated_at = now()
+			 WHERE id = $1`, id, []string{tag})
+	case "remove":
+		_, err = s.store.Pool().Exec(r.Context(),
+			`UPDATE links SET tags = array_remove(tags, $2), updated_at = now() WHERE id = $1`,
+			id, tag)
+	default:
+		http.Error(w, "op must be add|remove", http.StatusBadRequest)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	cur, err := s.fetchOne(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := s.tmpl.ExecuteTemplate(w, "_tags.html", toLinkVM(cur)); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
