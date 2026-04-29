@@ -139,6 +139,8 @@ For cron-driven sync without the server:
 
 URL canonicalization (strip `utm_*`, `fbclid`, etc.) deduplicates the same article reaching darek through multiple sources. Each link is auto-classified (`article` / `video` / `tweet` / `podcast`) by URL heuristics; you can override the kind from the UI.
 
+Each row has an **analyze** button that asks OpenAI to summarize the link and propose tags. Click it; the row updates in place. Tags merge into existing tags; the proposed summary overwrites whatever the source provided. Re-clicking refreshes both. The button is hidden if `openai.api_key_env` is unset.
+
 ## Mail
 
 Mail uses a hybrid sync model: envelopes (subject, from, date, snippet) are cached in Postgres, bodies and attachments are fetched live from IMAP on demand.

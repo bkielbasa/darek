@@ -42,6 +42,9 @@ type Metrics struct {
 	// RSS ingest pipeline
 	LinksIngest          metric.Int64Counter
 	FreshRSSSyncDuration metric.Float64Histogram
+
+	// AI analyze
+	LinksAnalyze metric.Int64Counter
 }
 
 var (
@@ -100,6 +103,7 @@ func MetricsInstance() (*Metrics, error) {
 			LinksEvents:            i64(m.Int64Counter("darek.links.events")),
 			LinksIngest:            i64(m.Int64Counter("darek.links.ingest")),
 			FreshRSSSyncDuration:   f64hist(m.Float64Histogram("darek.freshrss.sync_duration", metric.WithUnit("s"))),
+			LinksAnalyze:           i64(m.Int64Counter("darek.links.analyze")),
 		}
 		metricsErr = err
 	})

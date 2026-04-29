@@ -8,24 +8,31 @@ import (
 	"strings"
 	"time"
 
+	"darek/analyze"
 	"darek/links"
+	"darek/obs"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // linkVM is the view-model for a single row.
 type linkVM struct {
-	ID            string
-	URL           string
-	Title         string
-	Kind          string
-	Feed          string
-	Notes         string
-	Tags          []string
-	Rating        *int
-	RelTime       string
-	RatingButtons []ratingBtn
-	AllKinds      []string
+	ID             string
+	URL            string
+	Title          string
+	Kind           string
+	Feed           string
+	Notes          string
+	Tags           []string
+	Rating         *int
+	Summary        string
+	AnalyzedAt     *time.Time
+	AnalyzeEnabled bool
+	RelTime        string
+	RatingButtons  []ratingBtn
+	AllKinds       []string
 }
 
 type ratingBtn struct {
@@ -64,7 +71,7 @@ func parseListQuery(r *http.Request) listQuery {
 	return q
 }
 
-func toLinkVM(l links.Link) linkVM {
+func toLinkVM(l links.Link, analyzeEnabled bool) linkVM {
 	rb := make([]ratingBtn, 5)
 	cur := 0
 	if l.Rating != nil {
@@ -74,17 +81,20 @@ func toLinkVM(l links.Link) linkVM {
 		rb[i] = ratingBtn{Value: i + 1, Filled: i < cur}
 	}
 	return linkVM{
-		ID:            l.ID.String(),
-		URL:           l.URL,
-		Title:         l.Title,
-		Kind:          l.Kind,
-		Feed:          l.Feed,
-		Notes:         l.Notes,
-		Tags:          l.Tags,
-		Rating:        l.Rating,
-		RelTime:       relTime(l.UpdatedAt),
-		RatingButtons: rb,
-		AllKinds:      []string{"article", "video", "tweet", "podcast", "other"},
+		ID:             l.ID.String(),
+		URL:            l.URL,
+		Title:          l.Title,
+		Kind:           l.Kind,
+		Feed:           l.Feed,
+		Notes:          l.Notes,
+		Tags:           l.Tags,
+		Rating:         l.Rating,
+		Summary:        l.Summary,
+		AnalyzedAt:     l.AnalyzedAt,
+		AnalyzeEnabled: analyzeEnabled,
+		RelTime:        relTime(l.UpdatedAt),
+		RatingButtons:  rb,
+		AllKinds:       []string{"article", "video", "tweet", "podcast", "other"},
 	}
 }
 
@@ -133,7 +143,7 @@ func (s *Server) handleRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cur.Rating = ratingPtr
-	if err := s.tmpl.ExecuteTemplate(w, "_rating.html", toLinkVM(cur)); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "_rating.html", toLinkVM(cur, s.analyze != nil)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -173,7 +183,7 @@ func (s *Server) handleList(queueOnly bool) http.HandlerFunc {
 			if queueOnly && l.Rating != nil {
 				continue
 			}
-			rows = append(rows, toLinkVM(l))
+			rows = append(rows, toLinkVM(l, s.analyze != nil))
 		}
 		title := "queue"
 		path := "/"
@@ -237,7 +247,7 @@ func (s *Server) handleTags(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "_tags.html", toLinkVM(cur)); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "_tags.html", toLinkVM(cur, s.analyze != nil)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -267,7 +277,7 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "_notes.html", toLinkVM(cur)); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "_notes.html", toLinkVM(cur, s.analyze != nil)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -363,7 +373,60 @@ func (s *Server) handleKind(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "_kind.html", toLinkVM(cur)); err != nil {
+	if err := s.tmpl.ExecuteTemplate(w, "_kind.html", toLinkVM(cur, s.analyze != nil)); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	if s.analyze == nil {
+		http.Error(w, "analyze not configured", http.StatusNotImplemented)
+		return
+	}
+	cur, err := s.fetchOne(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	out, err := s.analyze.Analyze(r.Context(), analyze.Input{
+		Title: cur.Title, URL: cur.URL, Body: cur.Summary,
+	})
+	if err != nil {
+		if m, _ := obs.MetricsInstance(); m != nil {
+			m.LinksAnalyze.Add(r.Context(), 1, metric.WithAttributes(attribute.String("outcome", "error")))
+		}
+		// Render the row with an inline error in the summary slot.
+		cur.Summary = fmt.Sprintf("analysis failed: %v", err)
+		_ = s.tmpl.ExecuteTemplate(w, "_row.html", toLinkVM(cur, true))
+		return
+	}
+
+	if _, err := s.store.Pool().Exec(r.Context(), `
+		UPDATE links
+		   SET summary     = $2,
+		       tags        = ARRAY(SELECT DISTINCT unnest(tags || $3::text[])),
+		       analyzed_at = now(),
+		       updated_at  = now()
+		 WHERE id = $1`, id, out.Summary, out.Tags); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if m, _ := obs.MetricsInstance(); m != nil {
+		m.LinksAnalyze.Add(r.Context(), 1, metric.WithAttributes(attribute.String("outcome", "ok")))
+	}
+
+	cur, err = s.fetchOne(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := s.tmpl.ExecuteTemplate(w, "_row.html", toLinkVM(cur, true)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

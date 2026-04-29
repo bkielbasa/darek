@@ -48,10 +48,11 @@ func Sync(ctx context.Context, fr Lister, store *links.Store) (*Result, error) {
 			continue
 		}
 		_, _, err := links.IngestOne(ctx, store, links.Candidate{
-			URL:    a.URL,
-			Title:  a.Title,
-			Source: "freshrss",
-			Feed:   a.Feed,
+			URL:     a.URL,
+			Title:   a.Title,
+			Source:  "freshrss",
+			Feed:    a.Feed,
+			Summary: a.Summary,
 		})
 		if err != nil {
 			res.Errors = append(res.Errors, fmt.Errorf("ingest %s: %w", a.ID, err))
