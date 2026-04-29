@@ -106,19 +106,19 @@ func runServe(ctx context.Context, cfgPath string) error {
 
 	// Background sync loop (only if sync is configured AND interval > 0).
 	if sync != nil && cfg.FreshRSS.SyncInterval > 0 {
-		go runSyncLoop(ctx, sync, cfg.FreshRSS.SyncInterval)
+		go runSyncLoop(ctx, sync, cfg.FreshRSS.SyncInterval, "freshrss")
 	}
 
 	fmt.Fprintf(os.Stderr, "darek serve listening on %s\n", cfg.Server.Bind)
 	return srv.Run(ctx, cfg.Server.Bind)
 }
 
-func runSyncLoop(ctx context.Context, sync serve.SyncFn, interval time.Duration) {
+func runSyncLoop(ctx context.Context, sync serve.SyncFn, interval time.Duration, name string) {
 	// Run immediately on startup.
 	if msg, err := sync(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "freshrss sync error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s sync error: %v\n", name, err)
 	} else {
-		fmt.Fprintf(os.Stderr, "freshrss sync: %s\n", msg)
+		fmt.Fprintf(os.Stderr, "%s sync: %s\n", name, msg)
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -128,9 +128,9 @@ func runSyncLoop(ctx context.Context, sync serve.SyncFn, interval time.Duration)
 			return
 		case <-ticker.C:
 			if msg, err := sync(ctx); err != nil {
-				fmt.Fprintf(os.Stderr, "freshrss sync error: %v\n", err)
+				fmt.Fprintf(os.Stderr, "%s sync error: %v\n", name, err)
 			} else {
-				fmt.Fprintf(os.Stderr, "freshrss sync: %s\n", msg)
+				fmt.Fprintf(os.Stderr, "%s sync: %s\n", name, msg)
 			}
 		}
 	}
