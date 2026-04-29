@@ -46,7 +46,8 @@ func (s *Server) routes() {
 	staticFS, _ := fs.Sub(StaticFS, "static")
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
-	// Routes added in later tasks.
+	s.mux.Handle("GET /{$}", s.handleList(true))  // queue
+	s.mux.Handle("GET /all", s.handleList(false)) // archive
 }
 
 // Run starts the server on bind and blocks until ctx is canceled.

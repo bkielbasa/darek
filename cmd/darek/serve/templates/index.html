@@ -1,0 +1,34 @@
+{{define "index.html"}}
+{{template "layout" .}}
+{{end}}
+
+{{define "title"}}{{.PageTitle}}{{end}}
+
+{{define "content"}}
+<h1>{{.PageTitle}}</h1>
+
+<form method="get" action="{{.Path}}" class="filters">
+  <input type="search" name="q" placeholder="search…" value="{{.Query.Q}}">
+  <select name="kind">
+    <option value="">all kinds</option>
+    {{range $k := .Kinds}}
+      <option value="{{$k}}" {{if eq $k $.Query.Kind}}selected{{end}}>{{$k}}</option>
+    {{end}}
+  </select>
+  <select name="min_rating">
+    <option value="">any rating</option>
+    {{range $i := .Ratings}}
+      <option value="{{$i}}" {{if eq $i $.Query.MinRating}}selected{{end}}>≥ {{$i}}</option>
+    {{end}}
+  </select>
+  <button type="submit">filter</button>
+</form>
+
+<div id="rows">
+  {{range .Links}}
+    {{template "_row.html" .}}
+  {{else}}
+    <p>nothing here</p>
+  {{end}}
+</div>
+{{end}}
