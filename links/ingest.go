@@ -85,7 +85,7 @@ func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool,
 // normalizeSource clamps unknown source values to "other" to bound cardinality.
 func normalizeSource(s string) string {
 	switch s {
-	case "freshrss", "user", "email":
+	case "freshrss", "user", "email", "todoist":
 		return s
 	default:
 		return "other"

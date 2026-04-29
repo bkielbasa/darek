@@ -14,7 +14,9 @@ import (
 	"darek/links"
 	"darek/llm"
 	"darek/obs"
+	"darek/todoistimport"
 	"darek/tools/freshrss"
+	"darek/tools/todoist"
 )
 
 func runServe(ctx context.Context, cfgPath string) error {
@@ -99,26 +101,49 @@ func runServe(ctx context.Context, cfgPath string) error {
 		}
 	}
 
+	var todoistSync serve.SyncFn
+	if cfg.Todoist.TokenEnv != "" {
+		token, err := config.ResolveSecret("env:" + cfg.Todoist.TokenEnv)
+		if err == nil && token != "" {
+			td, err := todoist.New(todoist.Options{Token: token})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warn: todoist client: %v\n", err)
+			} else {
+				todoistSync = func(ctx context.Context) (string, error) {
+					res, err := todoistimport.Sync(ctx, td, store)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("imported=%d completed=%d skipped=%d errors=%d",
+						res.Imported, res.Completed, res.Skipped, len(res.Errors)), nil
+				}
+			}
+		}
+	}
+
 	srv, err := serve.New(store, sync, analyzer)
 	if err != nil {
 		return err
 	}
 
-	// Background sync loop (only if sync is configured AND interval > 0).
+	// Background sync loops (only if configured AND interval > 0).
 	if sync != nil && cfg.FreshRSS.SyncInterval > 0 {
-		go runSyncLoop(ctx, sync, cfg.FreshRSS.SyncInterval)
+		go runSyncLoop(ctx, sync, cfg.FreshRSS.SyncInterval, "freshrss")
+	}
+	if todoistSync != nil && cfg.Todoist.SyncInterval > 0 {
+		go runSyncLoop(ctx, todoistSync, cfg.Todoist.SyncInterval, "todoist")
 	}
 
 	fmt.Fprintf(os.Stderr, "darek serve listening on %s\n", cfg.Server.Bind)
 	return srv.Run(ctx, cfg.Server.Bind)
 }
 
-func runSyncLoop(ctx context.Context, sync serve.SyncFn, interval time.Duration) {
+func runSyncLoop(ctx context.Context, sync serve.SyncFn, interval time.Duration, name string) {
 	// Run immediately on startup.
 	if msg, err := sync(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "freshrss sync error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s sync error: %v\n", name, err)
 	} else {
-		fmt.Fprintf(os.Stderr, "freshrss sync: %s\n", msg)
+		fmt.Fprintf(os.Stderr, "%s sync: %s\n", name, msg)
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -128,9 +153,9 @@ func runSyncLoop(ctx context.Context, sync serve.SyncFn, interval time.Duration)
 			return
 		case <-ticker.C:
 			if msg, err := sync(ctx); err != nil {
-				fmt.Fprintf(os.Stderr, "freshrss sync error: %v\n", err)
+				fmt.Fprintf(os.Stderr, "%s sync error: %v\n", name, err)
 			} else {
-				fmt.Fprintf(os.Stderr, "freshrss sync: %s\n", msg)
+				fmt.Fprintf(os.Stderr, "%s sync: %s\n", name, msg)
 			}
 		}
 	}

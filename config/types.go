@@ -48,7 +48,8 @@ type Links struct {
 }
 
 type Todoist struct {
-	TokenEnv string `yaml:"token_env"`
+	TokenEnv     string        `yaml:"token_env"`
+	SyncInterval time.Duration `yaml:"sync_interval"`
 }
 
 type FreshRSS struct {
