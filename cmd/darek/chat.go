@@ -58,6 +58,10 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 	}
 	defer pool.Close()
 
+	if err := obs.RegisterPoolGauges(pool); err != nil {
+		// Best-effort: pool gauges are nice-to-have, never block startup.
+	}
+
 	llmClient, err := llm.New(llm.Options{
 		APIKey:  apiKey,
 		BaseURL: cfg.OpenAI.BaseURL,

@@ -9,6 +9,7 @@ import (
 
 	"darek/config"
 	"darek/db"
+	"darek/obs"
 	"darek/tools/mail"
 	mailimap "darek/tools/mail/imap"
 )
@@ -46,6 +47,10 @@ func runMailSync(ctx context.Context, cfgPath string, args []string) error {
 		return err
 	}
 	defer pool.Close()
+
+	if err := obs.RegisterPoolGauges(pool); err != nil {
+		// Best-effort: pool gauges are nice-to-have, never block startup.
+	}
 
 	store := mail.NewStore(pool.Inner())
 	for _, ac := range cfg.Mail.Accounts {
