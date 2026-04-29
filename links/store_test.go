@@ -15,7 +15,7 @@ import (
 func TestStore_SaveAndSearch(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	five := 5
@@ -38,7 +38,7 @@ func TestStore_SaveAndSearch(t *testing.T) {
 func TestStore_Save_UpsertMergesTags(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	id1, err := s.Save(ctx, SaveInput{URL: "u", Tags: []string{"a"}})
@@ -55,7 +55,7 @@ func TestStore_Save_UpsertMergesTags(t *testing.T) {
 func TestStore_Save_ReplaceTags(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	_, _ = s.Save(ctx, SaveInput{URL: "u", Tags: []string{"a", "b"}})
@@ -67,7 +67,7 @@ func TestStore_Save_ReplaceTags(t *testing.T) {
 func TestStore_Save_RatingValidation(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 	bad := 6
 	_, err := s.Save(ctx, SaveInput{URL: "u", Rating: &bad})
@@ -77,7 +77,7 @@ func TestStore_Save_RatingValidation(t *testing.T) {
 func TestStore_Search_MinRating(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 	r5 := 5
 	r2 := 2
@@ -94,7 +94,7 @@ func TestStore_Search_MinRating(t *testing.T) {
 func TestStore_Similar_OnlyRated(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 	r5 := 5
 	_, _ = s.Save(ctx, SaveInput{URL: "u1", Title: "Go concurrency", Tags: []string{"go"}, Rating: &r5, Notes: "great"})
@@ -109,7 +109,7 @@ func TestStore_Similar_OnlyRated(t *testing.T) {
 func TestStore_Delete_ByURL(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 	_, _ = s.Save(ctx, SaveInput{URL: "u"})
 	require.NoError(t, s.Delete(ctx, [16]byte{}, "u"))

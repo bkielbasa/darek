@@ -52,6 +52,17 @@ func (p *Pool) Close() { p.inner.Close() }
 // wrapper methods so metrics get recorded.
 func (p *Pool) Inner() *pgxpool.Pool { return p.inner }
 
+// Wrap builds a *Pool around an already-open *pgxpool.Pool. Intended for tests
+// that already have a raw pool (e.g., from internal/testutil/pg.Start). In
+// production, use Open.
+func Wrap(inner *pgxpool.Pool) *Pool {
+	p := &Pool{inner: inner}
+	if m, err := obs.MetricsInstance(); err == nil {
+		p.m = m
+	}
+	return p
+}
+
 // Stat returns pool statistics. Used by obs.RegisterPoolGauges.
 func (p *Pool) Stat() *pgxpool.Stat { return p.inner.Stat() }
 

@@ -16,7 +16,7 @@ func TestStore_SaveAndRecall(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
 
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	_, err := s.Save(ctx, "I'm tracking a Berlin trip in May", []string{"travel"}, "user")
@@ -34,7 +34,7 @@ func TestStore_RecallEmpty_ReturnsRecent(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
 
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 	_, _ = s.Save(ctx, "first", nil, "user")
 	_, _ = s.Save(ctx, "second", nil, "user")

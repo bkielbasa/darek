@@ -76,7 +76,7 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 	if err != nil {
 		return err
 	}
-	store := memory.NewStore(pool.Inner())
+	store := memory.NewStore(pool)
 	if err := reg.Register(memory.RecallTool{Store: store}); err != nil {
 		return err
 	}
@@ -85,7 +85,7 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 	}
 
 	// Links (taste graph)
-	linkStore := links.NewStore(pool.Inner())
+	linkStore := links.NewStore(pool)
 	for _, t := range []tools.Tool{
 		links.SaveTool{Store: linkStore},
 		links.SearchTool{Store: linkStore},

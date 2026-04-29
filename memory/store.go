@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"darek/db"
+	"darek/obs"
+
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Note struct {
@@ -17,9 +19,18 @@ type Note struct {
 	Source    string
 }
 
-type Store struct{ pool *pgxpool.Pool }
+type Store struct {
+	pool *db.Pool
+	m    *obs.Metrics
+}
 
-func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+func NewStore(pool *db.Pool) *Store {
+	var m *obs.Metrics
+	if got, err := obs.MetricsInstance(); err == nil {
+		m = got
+	}
+	return &Store{pool: pool, m: m}
+}
 
 func (s *Store) Save(ctx context.Context, body string, tags []string, source string) (uuid.UUID, error) {
 	if body == "" {
@@ -38,6 +49,9 @@ func (s *Store) Save(ctx context.Context, body string, tags []string, source str
 	`, body, tags, source).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("insert note: %w", err)
+	}
+	if s.m != nil {
+		s.m.MemoryNotesSaved.Add(ctx, 1)
 	}
 	return id, nil
 }
@@ -81,7 +95,13 @@ func (s *Store) Recall(ctx context.Context, query string, limit int) ([]Note, er
 		}
 		out = append(out, n)
 	}
-	return out, cur.Err()
+	if err := cur.Err(); err != nil {
+		return nil, err
+	}
+	if s.m != nil {
+		s.m.MemoryNotesRecalled.Add(ctx, int64(len(out)))
+	}
+	return out, nil
 }
 
 // Internal alias to keep the Recall body readable.

@@ -16,7 +16,7 @@ import (
 func TestSaveTool(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	out, err := SaveTool{Store: s}.Execute(context.Background(),
 		json.RawMessage(`{"url":"https://x.com/a","rating":5,"tags":["go"],"notes":"good"}`))
 	require.NoError(t, err)
@@ -26,7 +26,7 @@ func TestSaveTool(t *testing.T) {
 func TestSearchTool(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 	five := 5
 	_, _ = s.Save(ctx, SaveInput{URL: "https://x.com/a", Title: "Concurrency in Go", Rating: &five, Tags: []string{"go"}})
@@ -40,7 +40,7 @@ func TestSearchTool(t *testing.T) {
 func TestSimilarTool(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 	five := 5
 	_, _ = s.Save(ctx, SaveInput{URL: "u1", Title: "Go concurrency", Rating: &five, Notes: "great patterns"})

@@ -17,7 +17,7 @@ func TestSaveTool_AndRecallTool(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
 
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	out, err := SaveTool{Store: s}.Execute(ctx, json.RawMessage(`{"body":"prefer concise replies","tags":["style"]}`))

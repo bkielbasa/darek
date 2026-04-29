@@ -7,9 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"darek/db"
+	"darek/obs"
+
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type Link struct {
@@ -24,9 +28,18 @@ type Link struct {
 	UpdatedAt time.Time
 }
 
-type Store struct{ pool *pgxpool.Pool }
+type Store struct {
+	pool *db.Pool
+	m    *obs.Metrics
+}
 
-func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+func NewStore(pool *db.Pool) *Store {
+	var m *obs.Metrics
+	if got, err := obs.MetricsInstance(); err == nil {
+		m = got
+	}
+	return &Store{pool: pool, m: m}
+}
 
 type SaveInput struct {
 	URL         string
@@ -73,6 +86,9 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (uuid.UUID, error) {
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("insert: %w", err)
 		}
+		if s.m != nil {
+			s.m.LinksEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("op", "save_new")))
+		}
 	case err != nil:
 		return uuid.Nil, fmt.Errorf("lookup: %w", err)
 	default:
@@ -104,6 +120,9 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (uuid.UUID, error) {
 		_, err = tx.Exec(ctx, `UPDATE links SET `+strings.Join(set, ", ")+` WHERE id = $1`, args...)
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("update: %w", err)
+		}
+		if s.m != nil {
+			s.m.LinksEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("op", "save_update")))
 		}
 	}
 	return id, tx.Commit(ctx)
@@ -172,7 +191,14 @@ func (s *Store) Search(ctx context.Context, o SearchOpts) ([]Link, error) {
 		return nil, fmt.Errorf("query: %w", err)
 	}
 	defer rows.Close()
-	return scanLinks(rows)
+	out, err := scanLinks(rows)
+	if err != nil {
+		return nil, err
+	}
+	if s.m != nil {
+		s.m.LinksEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("op", "search")))
+	}
+	return out, nil
 }
 
 // Similar returns links ranked by tsvector similarity to the given free-form text,
@@ -206,7 +232,13 @@ func (s *Store) Similar(ctx context.Context, text string, limit int) ([]Link, er
 		}
 		out = append(out, l)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if s.m != nil {
+		s.m.LinksEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("op", "similar")))
+	}
+	return out, nil
 }
 
 func orderBy(o SearchOpts) string {
