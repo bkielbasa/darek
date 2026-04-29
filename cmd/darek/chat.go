@@ -12,6 +12,7 @@ import (
 	"darek/agent"
 	"darek/config"
 	"darek/db"
+	"darek/links"
 	"darek/llm"
 	"darek/memory"
 	"darek/obs"
@@ -77,6 +78,18 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 	}
 	if err := reg.Register(memory.SaveTool{Store: store}); err != nil {
 		return err
+	}
+
+	// Links (taste graph)
+	linkStore := links.NewStore(pool)
+	for _, t := range []tools.Tool{
+		links.SaveTool{Store: linkStore},
+		links.SearchTool{Store: linkStore},
+		links.SimilarTool{Store: linkStore},
+	} {
+		if err := reg.Register(t); err != nil {
+			return err
+		}
 	}
 
 	// Calendar sources

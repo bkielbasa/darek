@@ -19,6 +19,9 @@ memory:
   pgvector: false
   embedding_model: text-embedding-3-small
 
+links:
+  pgvector: false  # opt-in: enable pgvector embeddings for similarity (requires future plan)
+
 todoist:
   token_env: DAREK_TODOIST_TOKEN
 

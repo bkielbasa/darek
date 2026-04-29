@@ -47,6 +47,7 @@ tools/todoist/  Todoist REST client + tools
 tools/freshrss/ GReader-protocol RSS client + tools
 tools/mail/     MailAccount interface, IMAP sync, mail tools
 memory/         Postgres-backed notes + recall/save tools
+links/          taste-graph store + save/search/similar tools
 obs/            OTEL setup, metrics, redactor, slog
 db/             pgx pool + embedded migrations
 config/         YAML loader + secret resolver
@@ -60,6 +61,22 @@ otel/           collector, prom, grafana provisioning
 - `make test-integration` — run with `-tags=integration` (needs Docker)
 - `make up` / `make down` — Postgres
 - `make obs-up` / `make obs-down` — OTEL Collector + Jaeger + Prom + Grafana
+
+## Links (taste graph)
+
+Save URLs you've read with a 1–5 rating, tags, and notes. The agent uses past ratings to reason about whether you'd like new content.
+
+Tools:
+- `links.save(url, rating?, tags?, notes?)` — saves or updates by URL. Tags merge by default.
+- `links.search(query?, min_rating?, tags?, since?)` — full-text + filters.
+- `links.similar(text)` — finds your rated links most similar to a piece of text; the agent reads the returned ratings and notes to decide.
+
+Example:
+
+```
+./darek "save https://research.swtch.com/gomm — Go memory model, rated 5, tags go,concurrency, notes core reading"
+./darek "I'm reading 'Concurrency Patterns in Distributed Systems' — would I like it?"
+```
 
 ## Calendars
 

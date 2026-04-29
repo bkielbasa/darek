@@ -8,6 +8,7 @@ type Config struct {
 	OTEL      OTEL          `yaml:"otel"`
 	Agent     Agent         `yaml:"agent"`
 	Memory    Memory        `yaml:"memory"`
+	Links     Links         `yaml:"links"`
 	Todoist   Todoist       `yaml:"todoist"`
 	FreshRSS  FreshRSS      `yaml:"freshrss"`
 	Calendars []CalendarSrc `yaml:"calendars"`
@@ -39,6 +40,10 @@ type Agent struct {
 type Memory struct {
 	Pgvector       bool   `yaml:"pgvector"`
 	EmbeddingModel string `yaml:"embedding_model"`
+}
+
+type Links struct {
+	Pgvector bool `yaml:"pgvector"`
 }
 
 type Todoist struct {
