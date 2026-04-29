@@ -42,9 +42,11 @@ func run() error {
 		return runCalendar(ctx, cfgPath, args)
 	case "mail":
 		return runMail(ctx, cfgPath, args)
+	case "freshrss":
+		return runFreshRSS(ctx, cfgPath, args)
 	case "", "chat":
 		return runChat(ctx, cfgPath, strings.Join(args, " "))
 	default:
-		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar, mail)", cmd)
+		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar, mail, freshrss)", cmd)
 	}
 }
