@@ -23,7 +23,7 @@ func (a accountResolver) ByNickname(n string) (MailAccount, bool) { x, ok := a[n
 func TestSearchTool(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	aid, _ := s.EnsureAccount(ctx, AccountSpec{Nickname: "p", Email: "m@x", IMAPHost: "h", IMAPPort: 993, IMAPTLS: true, Username: "u", SecretRef: "env:S"})
@@ -38,7 +38,7 @@ func TestSearchTool(t *testing.T) {
 func TestGetBodyTool(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	aid, _ := s.EnsureAccount(ctx, AccountSpec{Nickname: "p", Email: "m@x", IMAPHost: "h", IMAPPort: 993, IMAPTLS: true, Username: "u", SecretRef: "env:S"})
@@ -55,7 +55,7 @@ func TestGetBodyTool(t *testing.T) {
 func TestGetAttachmentTool_WritesFile(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	aid, _ := s.EnsureAccount(ctx, AccountSpec{Nickname: "p", Email: "m@x", IMAPHost: "h", IMAPPort: 993, IMAPTLS: true, Username: "u", SecretRef: "env:S"})

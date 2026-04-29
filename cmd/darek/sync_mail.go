@@ -52,7 +52,7 @@ func runMailSync(ctx context.Context, cfgPath string, args []string) error {
 		fmt.Fprintf(os.Stderr, "warn: register pool gauges: %v\n", err)
 	}
 
-	store := mail.NewStore(pool.Inner())
+	store := mail.NewStore(pool)
 	for _, ac := range cfg.Mail.Accounts {
 		if target != "" && target != ac.Nickname {
 			continue

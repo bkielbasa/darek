@@ -180,7 +180,7 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 
 	// Mail tools
 	if len(cfg.Mail.Accounts) > 0 {
-		mstore := mail.NewStore(pool.Inner())
+		mstore := mail.NewStore(pool)
 		resolver := mailAccountResolver{}
 		for _, ac := range cfg.Mail.Accounts {
 			secret, err := config.ResolveSecret("env:" + ac.SecretEnv)

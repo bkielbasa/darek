@@ -58,7 +58,7 @@ func (alwaysNo) Confirm(_ context.Context, _ Preview) (bool, error) { return fal
 func TestSendTool_HappyPath_AppendsToSent(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	smtp := &fakeSender{}
@@ -79,7 +79,7 @@ func TestSendTool_HappyPath_AppendsToSent(t *testing.T) {
 func TestSendTool_DeclinedReturnsCleanly(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	smtp := &fakeSender{}
@@ -96,7 +96,7 @@ func TestSendTool_DeclinedReturnsCleanly(t *testing.T) {
 func TestSendTool_ReplyResolvesThreading(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	aid, _ := s.EnsureAccount(ctx, AccountSpec{Nickname: "p", Email: "m@x", IMAPHost: "h", IMAPPort: 993, IMAPTLS: true, Username: "u", SecretRef: "env:S"})
@@ -122,7 +122,7 @@ func TestSendTool_ReplyResolvesThreading(t *testing.T) {
 func TestSendTool_SMTPErrorPropagates(t *testing.T) {
 	_, pool := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), pool))
-	s := NewStore(pool)
+	s := NewStore(db.Wrap(pool))
 	ctx := context.Background()
 
 	smtp := &fakeSender{err: errors.New("server down")}

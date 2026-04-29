@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"time"
 
+	"darek/db"
+
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type Store struct{ pool *pgxpool.Pool }
+type Store struct{ pool *db.Pool }
 
-func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
+func NewStore(pool *db.Pool) *Store { return &Store{pool: pool} }
 
 // EnsureAccount upserts the account by nickname and returns its id.
 type AccountSpec struct {
