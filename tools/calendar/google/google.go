@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"darek/obs"
 	"darek/tools/calendar"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -66,8 +67,12 @@ func (s *Source) ListEvents(ctx context.Context, from, to time.Time) ([]calendar
 	if !to.IsZero() {
 		call = call.TimeMax(to.Format(time.RFC3339))
 	}
-	res, err := call.Do()
-	if err != nil {
+	var res *calsvc.Events
+	if err := obs.Dep(ctx, "google_calendar", "list_events", func(ctx context.Context) error {
+		var err error
+		res, err = call.Do()
+		return err
+	}); err != nil {
 		return nil, fmt.Errorf("events.list: %w", err)
 	}
 	out := make([]calendar.Event, 0, len(res.Items))
