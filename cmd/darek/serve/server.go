@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"darek/analyze"
 	"darek/links"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -15,21 +16,29 @@ import (
 
 type SyncFn func(ctx context.Context) (string, error)
 
+// Analyzer is the subset of *analyze.Analyzer used by the HTTP server.
+// Defined as an interface so tests can supply a fake.
+type Analyzer interface {
+	Analyze(ctx context.Context, in analyze.Input) (analyze.Output, error)
+}
+
 // Server is the HTTP UI for browsing and rating links.
 type Server struct {
-	store *links.Store
-	tmpl  *template.Template
-	mux   *http.ServeMux
-	sync  SyncFn
+	store   *links.Store
+	tmpl    *template.Template
+	mux     *http.ServeMux
+	sync    SyncFn
+	analyze Analyzer
 }
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
-func New(store *links.Store, sync SyncFn) (*Server, error) {
+// If analyzer is nil, /links/{id}/analyze returns 501 and the UI hides the button.
+func New(store *links.Store, sync SyncFn, analyzer Analyzer) (*Server, error) {
 	t, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync}
+	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync, analyze: analyzer}
 	s.routes()
 	return s, nil
 }

@@ -79,7 +79,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 		}
 	}
 
-	srv, err := serve.New(store, sync)
+	srv, err := serve.New(store, sync, nil)
 	if err != nil {
 		return err
 	}
