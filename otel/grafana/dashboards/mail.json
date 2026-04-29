@@ -1,0 +1,56 @@
+{
+  "title": "darek — mail",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Envelopes synced (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_mail_envelopes_synced_total[24h]))"}],
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Bodies fetched (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_mail_bodies_fetched_total[24h]))"}],
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Attachments fetched (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_mail_attachments_fetched_total[24h]))"}],
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Mails sent (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_mail_sent_total[24h]))"}],
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Envelopes synced/min by account",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (account) (rate(darek_mail_envelopes_synced_total[1m]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}
+    },
+    {
+      "type": "timeseries",
+      "title": "IMAP error rate by op",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (op) (rate(darek_dep_requests_total{dep=\"imap\",outcome=\"error\"}[5m])) / clamp_min(sum by (op) (rate(darek_dep_requests_total{dep=\"imap\"}[5m])), 1e-9)"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 5}
+    },
+    {
+      "type": "timeseries",
+      "title": "IMAP sync_folder p95",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(darek_dep_latency_seconds_bucket{dep=\"imap\",op=\"sync_folder\"}[5m])))"}],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 13}
+    }
+  ]
+}

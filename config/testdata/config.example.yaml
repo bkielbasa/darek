@@ -1,0 +1,53 @@
+openai:
+  model: gpt-4.1
+  api_key_env: DAREK_OPENAI_API_KEY
+
+postgres:
+  url_env: DAREK_POSTGRES_URL
+
+otel:
+  service_name: darek
+  exporter_endpoint: localhost:4317
+  insecure: true
+
+agent:
+  max_iterations: 10
+  llm_timeout: 60s
+  tool_timeout: 30s
+
+memory:
+  pgvector: false
+  embedding_model: text-embedding-3-small
+
+links:
+  pgvector: false  # opt-in: enable pgvector embeddings for similarity (requires future plan)
+
+todoist:
+  token_env: DAREK_TODOIST_TOKEN
+
+freshrss:
+  base_url: https://rss.example.com
+  username: alice
+  password_env: DAREK_FRESHRSS_PASSWORD
+
+calendars:
+  - kind: ical
+    nickname: family
+    url: https://calendar.example.com/feed.ics
+  # - kind: google
+  #   nickname: personal
+  #   calendar_id: primary
+  #   client_id_env: DAREK_GCAL_CLIENT_ID
+  #   client_secret_env: DAREK_GCAL_CLIENT_SECRET
+
+mail:
+  attachments_dir: ~/.darek/attachments
+  attachment_ttl_days: 30
+  accounts:
+    - nickname: personal
+      email: me@example.com
+      imap: { host: imap.fastmail.com, port: 993, tls: true }
+      smtp: { host: smtp.fastmail.com, port: 465, tls: true }
+      username: me@example.com
+      secret_env: DAREK_MAIL_PERSONAL
+      sync_folders: [INBOX]

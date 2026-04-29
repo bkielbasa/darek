@@ -1,0 +1,116 @@
+{
+  "title": "darek — overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "links": [
+    {"title": "agent turns",   "type": "link", "url": "/d/agent_turns"},
+    {"title": "tokens & cost", "type": "link", "url": "/d/tokens_and_cost"},
+    {"title": "tools",         "type": "link", "url": "/d/tools"},
+    {"title": "external deps", "type": "link", "url": "/d/external_deps"},
+    {"title": "mail",          "type": "link", "url": "/d/mail"},
+    {"title": "links & memory","type": "link", "url": "/d/links_memory"},
+    {"title": "runtime",       "type": "link", "url": "/d/runtime"}
+  ],
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Turns (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_turn_duration_seconds_count[24h]))"}],
+      "gridPos": {"h": 5, "w": 5, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Tokens (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_tokens_input_total[24h])) + sum(increase(darek_tokens_output_total[24h]))"}],
+      "gridPos": {"h": 5, "w": 5, "x": 5, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "USD (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_llm_cost_usd_total[24h]))"}],
+      "gridPos": {"h": 5, "w": 4, "x": 10, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Error rate (1h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(rate(darek_dep_requests_total{outcome=\"error\"}[1h])) / clamp_min(sum(rate(darek_dep_requests_total[1h])), 1e-9)"}],
+      "gridPos": {"h": 5, "w": 5, "x": 14, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Goroutines",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "process_runtime_go_goroutines"}],
+      "gridPos": {"h": 5, "w": 5, "x": 19, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Tool calls/min (top 10)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "topk(10, sum by (tool) (rate(darek_tool_calls_total[1m])))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 5}
+    },
+    {
+      "type": "stat",
+      "title": "Mail synced (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_mail_envelopes_synced_total[24h]))"}],
+      "gridPos": {"h": 4, "w": 4, "x": 12, "y": 5}
+    },
+    {
+      "type": "stat",
+      "title": "Links saved (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_links_events_total{op=~\"save_new|save_update\"}[24h]))"}],
+      "gridPos": {"h": 4, "w": 4, "x": 16, "y": 5}
+    },
+    {
+      "type": "stat",
+      "title": "Notes saved (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_memory_notes_saved_total[24h]))"}],
+      "gridPos": {"h": 4, "w": 4, "x": 20, "y": 5}
+    },
+    {
+      "type": "timeseries",
+      "title": "$/hour by model",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (model) (rate(darek_llm_cost_usd_total[1h]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 13}
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p95 — turn vs LLM vs deps",
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(darek_turn_duration_seconds_bucket[5m])))",     "legendFormat": "turn p95"},
+        {"expr": "histogram_quantile(0.95, sum by (le) (rate(darek_llm_latency_seconds_bucket[5m])))",       "legendFormat": "llm p95"},
+        {"expr": "histogram_quantile(0.95, sum by (le, dep) (rate(darek_dep_latency_seconds_bucket[5m])))",  "legendFormat": "{{dep}} p95"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 13}
+    },
+    {
+      "type": "timeseries",
+      "title": "Errors/min by component",
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "sum(rate(darek_dep_requests_total{outcome=\"error\"}[1m]))",   "legendFormat": "dep"},
+        {"expr": "sum(rate(darek_tool_calls_total{outcome=\"error\"}[1m]))",     "legendFormat": "tool"},
+        {"expr": "sum(rate(darek_turn_duration_seconds_count{outcome=\"error\"}[1m]))", "legendFormat": "turn"},
+        {"expr": "sum(rate(darek_agent_max_iters_hit_total[1m]))",               "legendFormat": "agent (max-iters)"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 21}
+    },
+    {
+      "type": "table",
+      "title": "Top 5 failing ops (5m)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "topk(5, sum by (dep, op) (rate(darek_dep_requests_total{outcome=\"error\"}[5m])) / clamp_min(sum by (dep, op) (rate(darek_dep_requests_total[5m])), 1e-9))", "format": "table", "instant": true}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 21}
+    }
+  ]
+}

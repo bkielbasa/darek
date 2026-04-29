@@ -1,0 +1,20 @@
+# Build
+/darek
+/dist/
+
+# Local config & secrets
+secrets.env
+.darek/
+*.local.yaml
+
+# Test artifacts
+*.out
+coverage.txt
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store

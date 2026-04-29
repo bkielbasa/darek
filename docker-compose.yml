@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: darek-postgres
+    environment:
+      POSTGRES_USER: darek
+      POSTGRES_PASSWORD: darek
+      POSTGRES_DB: darek
+    ports:
+      - "5432:5432"
+    volumes:
+      - darek_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "darek"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+
+volumes:
+  darek_pg:

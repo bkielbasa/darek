@@ -1,0 +1,46 @@
+{
+  "title": "darek — tokens & cost",
+  "schemaVersion": 39,
+  "version": 2,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Tokens/s by kind",
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "sum(rate(darek_tokens_input_total[1m]))",  "legendFormat": "input"},
+        {"expr": "sum(rate(darek_tokens_output_total[1m]))", "legendFormat": "output"},
+        {"expr": "sum(rate(darek_tokens_cached_total[1m]))", "legendFormat": "cached"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Tokens/s by model (input)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (model) (rate(darek_tokens_input_total[1m]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "USD spent (1h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_llm_cost_usd_total[1h]))"}],
+      "gridPos": {"h": 5, "w": 6, "x": 0, "y": 8}
+    },
+    {
+      "type": "stat",
+      "title": "Cache hit %",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(rate(darek_tokens_cached_total[5m])) / clamp_min(sum(rate(darek_tokens_input_total[5m])), 1e-9)"}],
+      "gridPos": {"h": 5, "w": 6, "x": 6, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Cost rate by model",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (model) (rate(darek_llm_cost_usd_total[5m]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    }
+  ]
+}

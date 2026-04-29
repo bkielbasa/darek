@@ -1,0 +1,46 @@
+{
+  "title": "darek — runtime",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Goroutines",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "process_runtime_go_goroutines"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Heap in-use bytes",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "process_runtime_go_mem_heap_alloc_bytes"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "GC pause p95 (ns)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(process_runtime_go_gc_pause_ns_bucket[5m])))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "pgx pool",
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "darek_db_pool_acquired", "legendFormat": "acquired"},
+        {"expr": "darek_db_pool_idle",     "legendFormat": "idle"},
+        {"expr": "darek_db_pool_total",    "legendFormat": "total"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "DB query p95 by op",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, op) (rate(darek_dep_latency_seconds_bucket{dep=\"postgres\"}[5m])))"}],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+    }
+  ]
+}

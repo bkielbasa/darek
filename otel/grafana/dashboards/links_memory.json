@@ -1,0 +1,45 @@
+{
+  "title": "darek — links & memory",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Links events/min by op",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (op) (rate(darek_links_events_total[1m]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "Links saved (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_links_events_total{op=~\"save_new|save_update\"}[24h]))"}],
+      "gridPos": {"h": 5, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "type": "stat",
+      "title": "New unique links (24h)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum(increase(darek_links_events_total{op=\"save_new\"}[24h]))"}],
+      "gridPos": {"h": 5, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Notes saved/recalled per minute",
+      "datasource": "Prometheus",
+      "targets": [
+        {"expr": "sum(rate(darek_memory_notes_saved_total[1m]))",   "legendFormat": "saved"},
+        {"expr": "sum(rate(darek_memory_notes_recalled_total[1m]))","legendFormat": "recalled"}
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Postgres p95 by op",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, op) (rate(darek_dep_latency_seconds_bucket{dep=\"postgres\"}[5m])))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    }
+  ]
+}
