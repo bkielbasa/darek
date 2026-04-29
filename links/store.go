@@ -304,3 +304,6 @@ func scanLinks(rows pgx.Rows) ([]Link, error) {
 	}
 	return out, rows.Err()
 }
+
+// ErrNoRows returns pgx.ErrNoRows so consumers can compare without importing pgx.
+func ErrNoRows() error { return pgx.ErrNoRows }
