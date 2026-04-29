@@ -8,7 +8,7 @@ import (
 )
 
 func TestServer_Healthz(t *testing.T) {
-	s, err := serve.New(nil) // healthz doesn't need a store
+	s, err := serve.New(nil, nil) // healthz doesn't need a store
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -24,7 +24,7 @@ func TestServer_Healthz(t *testing.T) {
 }
 
 func TestServer_StaticCSS(t *testing.T) {
-	s, err := serve.New(nil)
+	s, err := serve.New(nil, nil)
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
