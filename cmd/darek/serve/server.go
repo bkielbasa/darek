@@ -48,6 +48,8 @@ func (s *Server) routes() {
 
 	s.mux.Handle("GET /{$}", s.handleList(true))  // queue
 	s.mux.Handle("GET /all", s.handleList(false)) // archive
+
+	s.mux.HandleFunc("POST /links/{id}/rating", s.handleRating)
 }
 
 // Run starts the server on bind and blocks until ctx is canceled.

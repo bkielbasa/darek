@@ -1,12 +1,15 @@
 package serve
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"darek/links"
+
+	"github.com/google/uuid"
 )
 
 // linkVM is the view-model for a single row.
@@ -96,6 +99,56 @@ func relTime(t time.Time) string {
 	default:
 		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
+}
+
+// handleRating sets (or unsets) the rating for a link and returns the
+// re-rendered rating widget.
+func (s *Server) handleRating(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	value := r.URL.Query().Get("value")
+	n, _ := strconv.Atoi(value)
+
+	cur, err := s.fetchOne(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var ratingPtr *int
+	// Click-current-to-clear: if the new value equals the existing rating, unset.
+	if cur.Rating != nil && *cur.Rating == n {
+		ratingPtr = nil
+	} else if n >= 1 && n <= 5 {
+		v := n
+		ratingPtr = &v
+	}
+
+	if err := s.setRating(r.Context(), id, ratingPtr); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	cur.Rating = ratingPtr
+	if err := s.tmpl.ExecuteTemplate(w, "_rating.html", toLinkVM(cur)); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// fetchOne reads a single link by id via store.Get.
+func (s *Server) fetchOne(ctx context.Context, id uuid.UUID) (links.Link, error) {
+	return s.store.Get(ctx, id)
+}
+
+// setRating updates only the rating column. Goes through pool directly because
+// links.Save's nil-Rating means "leave alone", not "clear".
+func (s *Server) setRating(ctx context.Context, id uuid.UUID, rating *int) error {
+	_, err := s.store.Pool().Exec(ctx,
+		`UPDATE links SET rating = $2, updated_at = now() WHERE id = $1`,
+		id, rating)
+	return err
 }
 
 // handleList serves both the queue (rating IS NULL) and the archive.

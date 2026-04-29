@@ -307,3 +307,28 @@ func scanLinks(rows pgx.Rows) ([]Link, error) {
 
 // ErrNoRows returns pgx.ErrNoRows so consumers can compare without importing pgx.
 func ErrNoRows() error { return pgx.ErrNoRows }
+
+// Pool returns the underlying *db.Pool. Used by callers that need to issue
+// statements not covered by Save/Search/Similar (e.g. clearing fields where
+// "nil means leave alone" semantics block them).
+func (s *Store) Pool() *db.Pool { return s.pool }
+
+// Get returns a single link by id.
+func (s *Store) Get(ctx context.Context, id uuid.UUID) (Link, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, kind, coalesce(feed,''), created_at, updated_at
+		FROM links WHERE id = $1
+	`, id)
+	if err != nil {
+		return Link{}, err
+	}
+	defer rows.Close()
+	got, err := scanLinks(rows)
+	if err != nil {
+		return Link{}, err
+	}
+	if len(got) == 0 {
+		return Link{}, fmt.Errorf("link %s not found", id)
+	}
+	return got[0], nil
+}
