@@ -27,11 +27,8 @@ func Dep(ctx context.Context, dep, op string, fn func(context.Context) error) er
 	if op == "" {
 		return fmt.Errorf("obs.Dep: op is required")
 	}
-	m, err := MetricsInstance()
-	if err != nil {
-		return fmt.Errorf("obs.Dep metrics: %w", err)
-	}
 	ctx, span := depTracer.Start(ctx, dep+"."+op,
+		trace.WithSpanKind(trace.SpanKindClient),
 		trace.WithAttributes(
 			attribute.String("dep", dep),
 			attribute.String("op", op),
@@ -40,7 +37,7 @@ func Dep(ctx context.Context, dep, op string, fn func(context.Context) error) er
 	defer span.End()
 
 	start := time.Now()
-	err = fn(ctx)
+	err := fn(ctx)
 	dur := time.Since(start).Seconds()
 
 	outcome := "ok"
@@ -49,12 +46,16 @@ func Dep(ctx context.Context, dep, op string, fn func(context.Context) error) er
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 	}
-	attrs := metric.WithAttributes(
-		attribute.String("dep", dep),
-		attribute.String("op", op),
-		attribute.String("outcome", outcome),
-	)
-	m.DepRequests.Add(ctx, 1, attrs)
-	m.DepLatency.Record(ctx, dur, attrs)
+
+	// Record metrics best-effort: instrumentation must never block real work.
+	if m, mErr := MetricsInstance(); mErr == nil {
+		attrs := metric.WithAttributes(
+			attribute.String("dep", dep),
+			attribute.String("op", op),
+			attribute.String("outcome", outcome),
+		)
+		m.DepRequests.Add(ctx, 1, attrs)
+		m.DepLatency.Record(ctx, dur, attrs)
+	}
 	return err
 }
