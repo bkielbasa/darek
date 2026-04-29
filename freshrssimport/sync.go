@@ -9,9 +9,13 @@ import (
 	"darek/obs"
 	"darek/tools/freshrss"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 )
+
+var tracer = otel.Tracer("darek/freshrssimport")
 
 // Lister is the subset of *freshrss.Client used by Sync. Defined as an
 // interface so tests can supply a fake.
@@ -33,11 +37,16 @@ type Result struct {
 // as read. Per-article errors are collected and returned; they don't abort
 // the run.
 func Sync(ctx context.Context, fr Lister, store *links.Store) (*Result, error) {
+	ctx, span := tracer.Start(ctx, "freshrssimport.sync")
+	defer span.End()
+
 	start := time.Now()
 	res := &Result{}
 
 	arts, err := fr.List(ctx, freshrss.ListOpts{Filter: freshrss.FilterUnread, Limit: 1000})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		recordDuration(ctx, start, "error")
 		return nil, fmt.Errorf("list unread: %w", err)
 	}
@@ -70,6 +79,12 @@ func Sync(ctx context.Context, fr Lister, store *links.Store) (*Result, error) {
 	if len(res.Errors) > 0 {
 		outcome = "partial"
 	}
+	span.SetAttributes(
+		attribute.Int("imported", res.Imported),
+		attribute.Int("marked_read", res.MarkedRead),
+		attribute.Int("skipped", res.Skipped),
+		attribute.Int("errors", len(res.Errors)),
+	)
 	recordDuration(ctx, start, outcome)
 	return res, nil
 }

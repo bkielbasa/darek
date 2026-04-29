@@ -11,9 +11,13 @@ import (
 	"darek/obs"
 	"darek/tools/todoist"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 )
+
+var tracer = otel.Tracer("darek/todoistimport")
 
 // Lister is the subset of *todoist.Client used by Sync. Defined as an
 // interface so tests can supply a fake.
@@ -64,11 +68,16 @@ func normalizeLabels(in []string) []string {
 // merges Todoist labels into the link's tags, and completes the task.
 // Tasks without URLs are left alone (not completed).
 func Sync(ctx context.Context, c Lister, store *links.Store) (*Result, error) {
+	ctx, span := tracer.Start(ctx, "todoistimport.sync")
+	defer span.End()
+
 	start := time.Now()
 	res := &Result{}
 
 	tasks, err := c.ListTasks(ctx, todoist.ListFilter{Filter: "#Inbox"})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		recordDuration(ctx, start, "error")
 		return nil, fmt.Errorf("list inbox: %w", err)
 	}
@@ -118,6 +127,12 @@ func Sync(ctx context.Context, c Lister, store *links.Store) (*Result, error) {
 	if len(res.Errors) > 0 {
 		outcome = "partial"
 	}
+	span.SetAttributes(
+		attribute.Int("imported", res.Imported),
+		attribute.Int("completed", res.Completed),
+		attribute.Int("skipped", res.Skipped),
+		attribute.Int("errors", len(res.Errors)),
+	)
 	recordDuration(ctx, start, outcome)
 	return res, nil
 }
