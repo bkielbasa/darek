@@ -38,6 +38,10 @@ type Metrics struct {
 
 	// Links
 	LinksEvents metric.Int64Counter
+
+	// RSS ingest pipeline
+	LinksIngest          metric.Int64Counter
+	FreshRSSSyncDuration metric.Float64Histogram
 }
 
 var (
@@ -94,6 +98,8 @@ func MetricsInstance() (*Metrics, error) {
 			MemoryNotesSaved:       i64(m.Int64Counter("darek.memory.notes_saved")),
 			MemoryNotesRecalled:    i64(m.Int64Counter("darek.memory.notes_recalled")),
 			LinksEvents:            i64(m.Int64Counter("darek.links.events")),
+			LinksIngest:            i64(m.Int64Counter("darek.links.ingest")),
+			FreshRSSSyncDuration:   f64hist(m.Float64Histogram("darek.freshrss.sync_duration", metric.WithUnit("s"))),
 		}
 		metricsErr = err
 	})
