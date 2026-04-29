@@ -10,11 +10,8 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/trace"
 )
 
 type Client struct {
@@ -22,7 +19,6 @@ type Client struct {
 	model   string
 	timeout time.Duration
 	m       *obs.Metrics
-	tracer  trace.Tracer
 }
 
 type Options struct {
@@ -55,7 +51,6 @@ func New(opt Options) (*Client, error) {
 		model:   opt.Model,
 		timeout: opt.Timeout,
 		m:       m,
-		tracer:  otel.Tracer("darek/llm"),
 	}, nil
 }
 
@@ -65,31 +60,25 @@ func (cl *Client) Chat(ctx context.Context, params openai.ChatCompletionNewParam
 	ctx, cancel := context.WithTimeout(ctx, cl.timeout)
 	defer cancel()
 
-	ctx, span := cl.tracer.Start(ctx, "chat",
-		trace.WithAttributes(
-			attribute.String("gen_ai.operation.name", "chat"),
-			attribute.String("gen_ai.system", "openai"),
-			attribute.String("gen_ai.request.model", cl.model),
-		),
-	)
-	defer span.End()
-
-	start := time.Now()
 	params.Model = cl.model
-	resp, err := cl.c.Chat.Completions.New(ctx, params)
+	start := time.Now()
+	var resp *openai.ChatCompletion
+	depErr := obs.Dep(ctx, "openai_chat", "chat", func(ctx context.Context) error {
+		var err error
+		resp, err = cl.c.Chat.Completions.New(ctx, params)
+		return err
+	})
 	dur := time.Since(start).Seconds()
 
 	outcome := "ok"
-	if err != nil {
+	if depErr != nil {
 		outcome = "error"
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 	}
 	cl.m.LLMLatency.Record(ctx, dur,
 		metric.WithAttributes(attribute.String("model", cl.model), attribute.String("outcome", outcome)),
 	)
-	if err != nil {
-		return nil, fmt.Errorf("openai chat: %w", err)
+	if depErr != nil {
+		return nil, fmt.Errorf("openai chat: %w", depErr)
 	}
 
 	in := int(resp.Usage.PromptTokens)
@@ -97,12 +86,6 @@ func (cl *Client) Chat(ctx context.Context, params openai.ChatCompletionNewParam
 	cached := int(resp.Usage.PromptTokensDetails.CachedTokens)
 	cost := Cost(cl.model, in, out, cached)
 
-	span.SetAttributes(
-		attribute.Int("gen_ai.usage.input_tokens", in),
-		attribute.Int("gen_ai.usage.output_tokens", out),
-		attribute.Int("darek.tokens.cached", cached),
-		attribute.Float64("darek.llm.cost_usd", cost),
-	)
 	mAttr := metric.WithAttributes(attribute.String("model", cl.model))
 	cl.m.TokensInput.Add(ctx, int64(in), mAttr)
 	cl.m.TokensOutput.Add(ctx, int64(out), mAttr)
