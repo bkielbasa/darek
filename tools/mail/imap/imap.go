@@ -9,14 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"darek/obs"
 	"darek/tools/mail"
 
 	goimap "github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Compile-time interface satisfaction check.
@@ -31,7 +30,6 @@ type Account struct {
 	useTLS   bool
 	username string
 	password string
-	tracer   trace.Tracer
 }
 
 // Options holds constructor parameters for New.
@@ -51,7 +49,6 @@ func New(opt Options) *Account {
 		nickname: opt.Nickname, email: opt.Email,
 		host: opt.Host, port: opt.Port, useTLS: opt.TLS,
 		username: opt.Username, password: opt.Password,
-		tracer: otel.Tracer("darek/mail/imap"),
 	}
 }
 
@@ -88,75 +85,61 @@ func (a *Account) connect(ctx context.Context) (*imapclient.Client, error) {
 // SyncFolder returns envelopes for messages with UID > sinceUID and the
 // current UIDVALIDITY for the folder.
 func (a *Account) SyncFolder(ctx context.Context, folder string, sinceUID uint32) ([]mail.Envelope, uint32, error) {
-	ctx, span := a.tracer.Start(ctx, "imap.sync_folder",
-		trace.WithAttributes(
-			attribute.String("imap.folder", folder),
-			attribute.Int64("imap.since_uid", int64(sinceUID)),
-		),
-	)
-	defer span.End()
-
-	c, err := a.connect(ctx)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, 0, err
-	}
-	defer func() { _ = c.Logout().Wait() }()
-
-	mb, err := c.Select(folder, &goimap.SelectOptions{ReadOnly: true}).Wait()
-	if err != nil {
-		err = fmt.Errorf("select %s: %w", folder, err)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, 0, err
-	}
-
-	if mb.NumMessages == 0 {
-		return nil, mb.UIDValidity, nil
-	}
-
-	// Fetch UIDs greater than sinceUID. UID(0) means "*" (end of range).
-	var seqset goimap.UIDSet
-	seqset.AddRange(goimap.UID(sinceUID+1), 0)
-
-	fetchOpts := &goimap.FetchOptions{
-		Envelope:      true,
-		Flags:         true,
-		InternalDate:  true,
-		BodyStructure: &goimap.FetchItemBodyStructure{Extended: true},
-		UID:           true,
-	}
-	cmd := c.Fetch(seqset, fetchOpts)
-	defer cmd.Close()
-
 	var envs []mail.Envelope
-	for {
-		msg := cmd.Next()
-		if msg == nil {
-			break
-		}
-		buf, err := msg.Collect()
+	var uidValidity uint32
+	depErr := obs.Dep(ctx, "imap", "sync_folder", func(ctx context.Context) error {
+		c, err := a.connect(ctx)
 		if err != nil {
-			err = fmt.Errorf("collect msg: %w", err)
-			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
-			return nil, 0, err
+			return err
 		}
-		envs = append(envs, fromGoimap(buf))
-	}
-	if err := cmd.Close(); err != nil {
-		err = fmt.Errorf("fetch close: %w", err)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, 0, err
-	}
+		defer func() { _ = c.Logout().Wait() }()
 
-	// Enrich snippets via a separate BODY[TEXT]<0.500> fetch (best-effort).
-	enrichSnippets(c, &envs)
+		mb, err := c.Select(folder, &goimap.SelectOptions{ReadOnly: true}).Wait()
+		if err != nil {
+			return fmt.Errorf("select %s: %w", folder, err)
+		}
+		uidValidity = mb.UIDValidity
+		if mb.NumMessages == 0 {
+			return nil
+		}
 
-	span.SetAttributes(attribute.Int("imap.envelope_count", len(envs)))
-	return envs, mb.UIDValidity, nil
+		var seqset goimap.UIDSet
+		seqset.AddRange(goimap.UID(sinceUID+1), 0)
+		fetchOpts := &goimap.FetchOptions{
+			Envelope:      true,
+			Flags:         true,
+			InternalDate:  true,
+			BodyStructure: &goimap.FetchItemBodyStructure{Extended: true},
+			UID:           true,
+		}
+		cmd := c.Fetch(seqset, fetchOpts)
+		defer cmd.Close()
+
+		for {
+			msg := cmd.Next()
+			if msg == nil {
+				break
+			}
+			buf, err := msg.Collect()
+			if err != nil {
+				return fmt.Errorf("collect msg: %w", err)
+			}
+			envs = append(envs, fromGoimap(buf))
+		}
+		if err := cmd.Close(); err != nil {
+			return fmt.Errorf("fetch close: %w", err)
+		}
+		enrichSnippets(c, &envs)
+		return nil
+	})
+	if depErr != nil {
+		return nil, 0, depErr
+	}
+	if m, _ := obs.MetricsInstance(); m != nil {
+		m.MailEnvelopesSynced.Add(ctx, int64(len(envs)),
+			metric.WithAttributes(attribute.String("account", a.nickname)))
+	}
+	return envs, uidValidity, nil
 }
 
 func enrichSnippets(c *imapclient.Client, envs *[]mail.Envelope) {
@@ -300,122 +283,97 @@ func flagsToStrings(f []goimap.Flag) []string {
 // FetchBody fetches and returns the plain-text body of the message with the
 // given UID in the given folder.
 func (a *Account) FetchBody(ctx context.Context, folder string, uid uint32) (string, error) {
-	ctx, span := a.tracer.Start(ctx, "imap.fetch_body",
-		trace.WithAttributes(
-			attribute.String("imap.folder", folder),
-			attribute.Int64("imap.uid", int64(uid)),
-		),
-	)
-	defer span.End()
-
-	c, err := a.connect(ctx)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return "", err
-	}
-	defer func() { _ = c.Logout().Wait() }()
-
-	if _, err := c.Select(folder, &goimap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
-		err = fmt.Errorf("select: %w", err)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return "", err
-	}
-	var us goimap.UIDSet
-	us.AddNum(goimap.UID(uid))
-	textSection := &goimap.FetchItemBodySection{
-		Specifier: goimap.PartSpecifierText,
-	}
-	cmd := c.Fetch(us, &goimap.FetchOptions{
-		UID:         true,
-		BodySection: []*goimap.FetchItemBodySection{textSection},
+	var body string
+	depErr := obs.Dep(ctx, "imap", "fetch_body", func(ctx context.Context) error {
+		c, err := a.connect(ctx)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = c.Logout().Wait() }()
+		if _, err := c.Select(folder, &goimap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
+			return fmt.Errorf("select: %w", err)
+		}
+		var us goimap.UIDSet
+		us.AddNum(goimap.UID(uid))
+		textSection := &goimap.FetchItemBodySection{Specifier: goimap.PartSpecifierText}
+		cmd := c.Fetch(us, &goimap.FetchOptions{
+			UID:         true,
+			BodySection: []*goimap.FetchItemBodySection{textSection},
+		})
+		defer cmd.Close()
+		msg := cmd.Next()
+		if msg == nil {
+			return fmt.Errorf("uid %d not found", uid)
+		}
+		buf, err := msg.Collect()
+		if err != nil {
+			return err
+		}
+		for _, b := range buf.BodySection {
+			body = string(b.Bytes)
+			return nil
+		}
+		return fmt.Errorf("no body section returned")
 	})
-	defer cmd.Close()
-
-	msg := cmd.Next()
-	if msg == nil {
-		err := fmt.Errorf("uid %d not found", uid)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return "", err
+	if depErr != nil {
+		return "", depErr
 	}
-	buf, err := msg.Collect()
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return "", err
+	if m, _ := obs.MetricsInstance(); m != nil {
+		m.MailBodiesFetched.Add(ctx, 1, metric.WithAttributes(attribute.String("account", a.nickname)))
 	}
-	for _, b := range buf.BodySection {
-		return string(b.Bytes), nil
-	}
-	err = fmt.Errorf("no body section returned")
-	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
-	return "", err
+	return body, nil
 }
 
 // FetchAttachment returns an io.ReadCloser for the attachment at partID of the
 // given UID in the given folder. The caller is responsible for closing.
 func (a *Account) FetchAttachment(ctx context.Context, folder string, uid uint32, partID string) (io.ReadCloser, error) {
-	ctx, span := a.tracer.Start(ctx, "imap.fetch_attachment",
-		trace.WithAttributes(
-			attribute.String("imap.folder", folder),
-			attribute.Int64("imap.uid", int64(uid)),
-			attribute.String("imap.part_id", partID),
-		),
-	)
-	defer span.End()
-
-	c, err := a.connect(ctx)
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
-	}
-	if _, err := c.Select(folder, &goimap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
-		_ = c.Close()
-		err = fmt.Errorf("select: %w", err)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
-	}
-	var us goimap.UIDSet
-	us.AddNum(goimap.UID(uid))
-	partSection := &goimap.FetchItemBodySection{
-		Specifier: goimap.PartSpecifierNone,
-		Part:      parsePartID(partID),
-	}
-	cmd := c.Fetch(us, &goimap.FetchOptions{
-		UID:         true,
-		BodySection: []*goimap.FetchItemBodySection{partSection},
-	})
-	msg := cmd.Next()
-	if msg == nil {
+	var rc io.ReadCloser
+	depErr := obs.Dep(ctx, "imap", "fetch_attachment", func(ctx context.Context) error {
+		c, err := a.connect(ctx)
+		if err != nil {
+			return err
+		}
+		if _, err := c.Select(folder, &goimap.SelectOptions{ReadOnly: true}).Wait(); err != nil {
+			_ = c.Close()
+			return fmt.Errorf("select: %w", err)
+		}
+		var us goimap.UIDSet
+		us.AddNum(goimap.UID(uid))
+		partSection := &goimap.FetchItemBodySection{
+			Specifier: goimap.PartSpecifierNone,
+			Part:      parsePartID(partID),
+		}
+		cmd := c.Fetch(us, &goimap.FetchOptions{
+			UID:         true,
+			BodySection: []*goimap.FetchItemBodySection{partSection},
+		})
+		msg := cmd.Next()
+		if msg == nil {
+			_ = cmd.Close()
+			_ = c.Close()
+			return fmt.Errorf("uid %d not found", uid)
+		}
+		buf, err := msg.Collect()
 		_ = cmd.Close()
+		if err != nil {
+			_ = c.Close()
+			return err
+		}
+		for _, b := range buf.BodySection {
+			_ = c.Logout().Wait()
+			rc = io.NopCloser(strings.NewReader(string(b.Bytes)))
+			return nil
+		}
 		_ = c.Close()
-		err := fmt.Errorf("uid %d not found", uid)
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
+		return fmt.Errorf("no body section returned")
+	})
+	if depErr != nil {
+		return nil, depErr
 	}
-	buf, err := msg.Collect()
-	_ = cmd.Close()
-	if err != nil {
-		_ = c.Close()
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-		return nil, err
+	if m, _ := obs.MetricsInstance(); m != nil {
+		m.MailAttachmentsFetched.Add(ctx, 1, metric.WithAttributes(attribute.String("account", a.nickname)))
 	}
-	for _, b := range buf.BodySection {
-		_ = c.Logout().Wait()
-		return io.NopCloser(strings.NewReader(string(b.Bytes))), nil
-	}
-	_ = c.Close()
-	err = fmt.Errorf("no body section returned")
-	span.RecordError(err)
-	span.SetStatus(codes.Error, err.Error())
-	return nil, err
+	return rc, nil
 }
 
 func parsePartID(p string) []int {
