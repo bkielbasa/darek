@@ -104,14 +104,27 @@ The CLI prints an auth URL; visit it, paste back the code, the token is saved to
 
 ## Todoist
 
-Set `todoist.token_env` in `~/.darek/config.yaml`:
+Set `todoist` in `~/.darek/config.yaml`:
 
 ```yaml
 todoist:
   token_env: DAREK_TODOIST_TOKEN
+  sync_interval: 15m       # how often `darek serve` polls #Inbox; 0 disables
 ```
 
-Get a token from <https://todoist.com/app/settings/integrations/developer>. Add it to `~/.darek/secrets.env`. Tools enabled: `todoist.list_tasks`, `todoist.create_task`, `todoist.complete_task`, `todoist.update_task`.
+Get a token from <https://todoist.com/app/settings/integrations/developer>. Add it to `~/.darek/secrets.env`. Tools enabled in chat: `todoist.list_tasks`, `todoist.create_task`, `todoist.complete_task`, `todoist.update_task`.
+
+### Todoist #Inbox link import
+
+Tasks in #Inbox containing a URL are imported into the local link store and the task is completed in Todoist. Tasks without URLs are left alone. Labels merge into the link's tags.
+
+For cron-driven sync without the server:
+
+```bash
+./darek todoist sync
+```
+
+`darek serve` polls Todoist on the configured `sync_interval` cadence (parallel to FreshRSS).
 
 ## FreshRSS
 
