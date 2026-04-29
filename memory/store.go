@@ -9,6 +9,7 @@ import (
 	"darek/obs"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 type Note struct {
@@ -62,21 +63,20 @@ func (s *Store) Recall(ctx context.Context, query string, limit int) ([]Note, er
 	if limit <= 0 {
 		limit = 5
 	}
-	var rows = s.pool.Query
 	var (
 		out []Note
-		cur pgxRows
+		cur pgx.Rows
 		err error
 	)
 	if query == "" {
-		cur, err = rows(ctx, `
+		cur, err = s.pool.Query(ctx, `
 			SELECT id, created_at, body, tags, source
 			FROM notes
 			ORDER BY created_at DESC
 			LIMIT $1
 		`, limit)
 	} else {
-		cur, err = rows(ctx, `
+		cur, err = s.pool.Query(ctx, `
 			SELECT id, created_at, body, tags, source
 			FROM notes
 			WHERE search @@ plainto_tsquery('simple', $1)
@@ -102,12 +102,4 @@ func (s *Store) Recall(ctx context.Context, query string, limit int) ([]Note, er
 		s.m.MemoryNotesRecalled.Add(ctx, int64(len(out)))
 	}
 	return out, nil
-}
-
-// Internal alias to keep the Recall body readable.
-type pgxRows = interface {
-	Next() bool
-	Scan(dst ...any) error
-	Close()
-	Err() error
 }

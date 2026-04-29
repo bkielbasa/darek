@@ -75,6 +75,7 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (uuid.UUID, error) {
 	defer tx.Rollback(ctx)
 
 	var id uuid.UUID
+	var op string
 	err = tx.QueryRow(ctx, `SELECT id FROM links WHERE url = $1`, in.URL).Scan(&id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -86,9 +87,7 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (uuid.UUID, error) {
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("insert: %w", err)
 		}
-		if s.m != nil {
-			s.m.LinksEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("op", "save_new")))
-		}
+		op = "save_new"
 	case err != nil:
 		return uuid.Nil, fmt.Errorf("lookup: %w", err)
 	default:
@@ -121,11 +120,15 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (uuid.UUID, error) {
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("update: %w", err)
 		}
-		if s.m != nil {
-			s.m.LinksEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("op", "save_update")))
-		}
+		op = "save_update"
 	}
-	return id, tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return uuid.Nil, err
+	}
+	if s.m != nil {
+		s.m.LinksEvents.Add(ctx, 1, metric.WithAttributes(attribute.String("op", op)))
+	}
+	return id, nil
 }
 
 // Delete removes a link by id (or by url if id is uuid.Nil).
