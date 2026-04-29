@@ -75,6 +75,10 @@ func Init(ctx context.Context, opt Options) (*Setup, func(context.Context) error
 	otel.SetMeterProvider(mp)
 	global.SetLoggerProvider(lp)
 
+	if err := StartRuntime(); err != nil {
+		return nil, nil, err
+	}
+
 	shutdown := func(ctx context.Context) error {
 		var errs []error
 		for _, fn := range []func(context.Context) error{
