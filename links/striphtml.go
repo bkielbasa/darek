@@ -7,8 +7,9 @@ import (
 )
 
 var (
-	tagRE = regexp.MustCompile(`<[^>]*>`)
-	wsRE  = regexp.MustCompile(`\s+`)
+	tagRE         = regexp.MustCompile(`<[^>]*>`)
+	wsRE          = regexp.MustCompile(`\s+`)
+	wsBeforePunct = regexp.MustCompile(`\s+([.,;:!?])`)
 )
 
 // StripHTML returns the visible text content of an HTML fragment with
@@ -22,5 +23,8 @@ func StripHTML(s string) string {
 	out := tagRE.ReplaceAllString(s, " ")
 	out = html.UnescapeString(out)
 	out = wsRE.ReplaceAllString(out, " ")
+	// Tag-replacement can leave a space before punctuation (e.g. "world ." from
+	// "<b>world</b>."); strip those.
+	out = wsBeforePunct.ReplaceAllString(out, "$1")
 	return strings.TrimSpace(out)
 }

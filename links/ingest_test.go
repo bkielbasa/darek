@@ -75,3 +75,24 @@ func TestIngestOne_RejectsUnparseableURL(t *testing.T) {
 	})
 	require.Error(t, err)
 }
+
+func TestIngestOne_StoresStrippedSummary(t *testing.T) {
+	_, raw := pg.Start(t)
+	require.NoError(t, db.Migrate(context.Background(), raw))
+	store := links.NewStore(db.Wrap(raw))
+	ctx := context.Background()
+
+	_, _, err := links.IngestOne(ctx, store, links.Candidate{
+		URL:     "https://example.com/sum",
+		Title:   "Hello",
+		Source:  "freshrss",
+		Summary: `<p>Hello <b>world</b>.</p><p>Second paragraph.</p>`,
+	})
+	require.NoError(t, err)
+
+	got, err := store.Search(ctx, links.SearchOpts{Query: "Hello"})
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, "Hello world. Second paragraph.", got[0].Summary)
+	require.Nil(t, got[0].AnalyzedAt, "AnalyzedAt should still be nil — only AI sets it")
+}

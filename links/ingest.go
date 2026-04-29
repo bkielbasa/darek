@@ -13,11 +13,12 @@ import (
 // Candidate is a URL produced by an ingestion source (RSS, email, manual UI,
 // agent tools). Sources fill what they know; IngestOne handles the rest.
 type Candidate struct {
-	URL    string // raw URL from the source (canonicalized inside IngestOne)
-	Title  string
-	Source string // "freshrss" | "email" | "user" | …
-	Feed   string // RSS feed name or other origin label; optional
-	Kind   string // optional override; classifier runs if empty
+	URL     string // raw URL from the source (canonicalized inside IngestOne)
+	Title   string
+	Source  string // "freshrss" | "email" | "user" | …
+	Feed    string // RSS feed name or other origin label; optional
+	Kind    string // optional override; classifier runs if empty
+	Summary string // optional source-provided summary; HTML stripped before storage
 }
 
 // IngestOne canonicalizes the URL, infers kind if unset, and upserts via the
@@ -53,11 +54,12 @@ func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool,
 	}
 
 	id, err := store.Save(ctx, SaveInput{
-		URL:    canon,
-		Title:  c.Title,
-		Source: c.Source,
-		Kind:   kind,
-		Feed:   c.Feed,
+		URL:     canon,
+		Title:   c.Title,
+		Source:  c.Source,
+		Kind:    kind,
+		Feed:    c.Feed,
+		Summary: StripHTML(c.Summary),
 	})
 	if err != nil {
 		// Best-effort outcome=error counter.
