@@ -1,0 +1,42 @@
+{
+  "title": "darek — external deps",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "RPS by dep",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (dep) (rate(darek_dep_requests_total[1m]))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Error rate by dep",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "sum by (dep) (rate(darek_dep_requests_total{outcome=\"error\"}[5m])) / clamp_min(sum by (dep) (rate(darek_dep_requests_total[5m])), 1e-9)"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p50 by dep",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.50, sum by (le, dep) (rate(darek_dep_latency_seconds_bucket[5m])))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency p95 by dep",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "histogram_quantile(0.95, sum by (le, dep) (rate(darek_dep_latency_seconds_bucket[5m])))"}],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    },
+    {
+      "type": "table",
+      "title": "Top slow ops (p95)",
+      "datasource": "Prometheus",
+      "targets": [{"expr": "topk(10, histogram_quantile(0.95, sum by (le, dep, op) (rate(darek_dep_latency_seconds_bucket[5m]))))", "format": "table", "instant": true}],
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16}
+    }
+  ]
+}
