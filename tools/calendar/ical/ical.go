@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"darek/obs"
 	"darek/tools/calendar"
 
 	ics "github.com/arran4/golang-ical"
@@ -36,14 +37,24 @@ func (s *Source) ListEvents(ctx context.Context, from, to time.Time) ([]calendar
 	if err != nil {
 		return nil, fmt.Errorf("new request: %w", err)
 	}
-	resp, err := s.client.Do(req)
-	if err != nil {
+	var resp *http.Response
+	if err := obs.Dep(ctx, "ical", "fetch", func(ctx context.Context) error {
+		var err error
+		resp, err = s.client.Do(req.WithContext(ctx))
+		if err != nil {
+			return err
+		}
+		if resp.StatusCode/100 != 2 {
+			status := resp.StatusCode
+			_ = resp.Body.Close()
+			resp = nil
+			return fmt.Errorf("status %d", status)
+		}
+		return nil
+	}); err != nil {
 		return nil, fmt.Errorf("fetch %s: %w", s.url, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("fetch %s: status %d", s.url, resp.StatusCode)
-	}
 	cal, err := ics.ParseCalendar(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("parse ics: %w", err)
