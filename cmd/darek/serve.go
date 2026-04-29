@@ -6,11 +6,13 @@ import (
 	"os"
 	"time"
 
+	"darek/analyze"
 	"darek/cmd/darek/serve"
 	"darek/config"
 	"darek/db"
 	"darek/freshrssimport"
 	"darek/links"
+	"darek/llm"
 	"darek/obs"
 	"darek/tools/freshrss"
 )
@@ -54,6 +56,24 @@ func runServe(ctx context.Context, cfgPath string) error {
 
 	store := links.NewStore(pool)
 
+	// Build the LLM client + analyzer if OpenAI is configured.
+	var analyzer serve.Analyzer
+	if apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv); err == nil && apiKey != "" {
+		llmClient, err := llm.New(llm.Options{
+			APIKey:  apiKey,
+			BaseURL: cfg.OpenAI.BaseURL,
+			Model:   cfg.OpenAI.Model,
+			Timeout: cfg.Agent.LLMTimeout,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "warn: llm client: %v (analyze button disabled)\n", err)
+		} else {
+			analyzer = analyze.New(llmClient)
+		}
+	} else {
+		fmt.Fprintf(os.Stderr, "info: openai not configured, analyze button disabled\n")
+	}
+
 	// Build the optional sync function — only if FreshRSS is configured.
 	var sync serve.SyncFn
 	if cfg.FreshRSS.BaseURL != "" {
@@ -79,7 +99,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 		}
 	}
 
-	srv, err := serve.New(store, sync, nil)
+	srv, err := serve.New(store, sync, analyzer)
 	if err != nil {
 		return err
 	}
