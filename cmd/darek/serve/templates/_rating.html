@@ -1,7 +1,7 @@
 {{define "_rating.html"}}
 <div class="stars" id="rating-{{.ID}}">
   {{range $n := .RatingButtons}}
-    <button hx-post="/links/{{$.ID}}/rating?value={{$n.Value}}" hx-target="#rating-{{$.ID}}" hx-swap="outerHTML">
+    <button class="{{if $n.Filled}}filled{{end}}" hx-post="/links/{{$.ID}}/rating?value={{$n.Value}}" hx-target="#rating-{{$.ID}}" hx-swap="outerHTML" title="rate {{$n.Value}}/5">
       {{if $n.Filled}}★{{else}}☆{{end}}
     </button>
   {{end}}

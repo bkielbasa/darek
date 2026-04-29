@@ -3,21 +3,23 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{block "title" .}}darek{{end}}</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
 </head>
 <body>
-<header>
+<header class="app">
   <a href="/" class="brand">darek</a>
-  <nav>
-    <a href="/">queue</a>
-    <a href="/all">archive</a>
-    <form method="post" action="/sync" hx-post="/sync" hx-target="#sync-banner" hx-swap="innerHTML">
-      <button type="submit">sync now</button>
-    </form>
+  <nav class="primary">
+    <a href="/" {{if eq .PageTitle "queue"}}class="active"{{end}}>queue</a>
+    <a href="/all" {{if eq .PageTitle "archive"}}class="active"{{end}}>archive</a>
   </nav>
+  <span class="spacer"></span>
   <div id="sync-banner"></div>
+  <form class="sync-form" method="post" action="/sync" hx-post="/sync" hx-target="#sync-banner" hx-swap="innerHTML">
+    <button type="submit">sync now</button>
+  </form>
 </header>
 <main>
   {{block "content" .}}{{end}}
