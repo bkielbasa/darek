@@ -24,6 +24,8 @@ type Link struct {
 	Tags      []string
 	Notes     string
 	Source    string
+	Kind      string // "article" | "video" | "tweet" | "podcast" | "other"
+	Feed      string // RSS feed name; empty for non-RSS sources
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
@@ -44,10 +46,12 @@ func NewStore(pool *db.Pool) *Store {
 type SaveInput struct {
 	URL         string
 	Title       string
-	Rating      *int     // 1..5 or nil; nil leaves existing rating untouched on update
+	Rating      *int     // 1..5 or nil
 	Tags        []string
 	Notes       string
 	Source      string // defaults to "user"
+	Kind        string // defaults to "article" on insert; ignored on update if empty
+	Feed        string // RSS feed name; empty leaves existing intact on update
 	ReplaceTags bool   // false (default): merge; true: overwrite
 }
 
@@ -80,10 +84,15 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (uuid.UUID, error) {
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		// Insert
+		kind := in.Kind
+		if kind == "" {
+			kind = "article"
+		}
 		err = tx.QueryRow(ctx, `
-			INSERT INTO links (url, title, rating, tags, notes, source)
-			VALUES ($1,$2,$3,$4,$5,$6) RETURNING id
-		`, in.URL, in.Title, in.Rating, in.Tags, in.Notes, in.Source).Scan(&id)
+			INSERT INTO links (url, title, rating, tags, notes, source, kind, feed)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''))
+			RETURNING id
+		`, in.URL, in.Title, in.Rating, in.Tags, in.Notes, in.Source, kind, in.Feed).Scan(&id)
 		if err != nil {
 			return uuid.Nil, fmt.Errorf("insert: %w", err)
 		}
@@ -115,6 +124,14 @@ func (s *Store) Save(ctx context.Context, in SaveInput) (uuid.UUID, error) {
 				set = append(set, fmt.Sprintf(
 					`tags = ARRAY(SELECT DISTINCT unnest(tags || $%d::text[]))`, len(args)))
 			}
+		}
+		if in.Kind != "" {
+			args = append(args, in.Kind)
+			set = append(set, fmt.Sprintf("kind = $%d", len(args)))
+		}
+		if in.Feed != "" {
+			args = append(args, in.Feed)
+			set = append(set, fmt.Sprintf("feed = $%d", len(args)))
 		}
 		_, err = tx.Exec(ctx, `UPDATE links SET `+strings.Join(set, ", ")+` WHERE id = $1`, args...)
 		if err != nil {
@@ -184,7 +201,7 @@ func (s *Store) Search(ctx context.Context, o SearchOpts) ([]Link, error) {
 	args = append(args, o.Limit)
 
 	q := `
-		SELECT id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, created_at, updated_at
+		SELECT id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, kind, coalesce(feed,''), created_at, updated_at
 		FROM links
 		WHERE ` + strings.Join(conds, " AND ") + `
 		ORDER BY ` + orderBy(o) + `
@@ -214,7 +231,7 @@ func (s *Store) Similar(ctx context.Context, text string, limit int) ([]Link, er
 		limit = 10
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, created_at, updated_at,
+		SELECT id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, kind, coalesce(feed,''), created_at, updated_at,
 		       ts_rank(search, plainto_tsquery('simple', $1)) AS rank
 		FROM links
 		WHERE rating IS NOT NULL
@@ -230,7 +247,7 @@ func (s *Store) Similar(ctx context.Context, text string, limit int) ([]Link, er
 	for rows.Next() {
 		var l Link
 		var rank float32
-		if err := rows.Scan(&l.ID, &l.URL, &l.Title, &l.Rating, &l.Tags, &l.Notes, &l.Source, &l.CreatedAt, &l.UpdatedAt, &rank); err != nil {
+		if err := rows.Scan(&l.ID, &l.URL, &l.Title, &l.Rating, &l.Tags, &l.Notes, &l.Source, &l.Kind, &l.Feed, &l.CreatedAt, &l.UpdatedAt, &rank); err != nil {
 			return nil, err
 		}
 		out = append(out, l)
@@ -280,7 +297,7 @@ func scanLinks(rows pgx.Rows) ([]Link, error) {
 	out := []Link{}
 	for rows.Next() {
 		var l Link
-		if err := rows.Scan(&l.ID, &l.URL, &l.Title, &l.Rating, &l.Tags, &l.Notes, &l.Source, &l.CreatedAt, &l.UpdatedAt); err != nil {
+		if err := rows.Scan(&l.ID, &l.URL, &l.Title, &l.Rating, &l.Tags, &l.Notes, &l.Source, &l.Kind, &l.Feed, &l.CreatedAt, &l.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, l)
