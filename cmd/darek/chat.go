@@ -72,7 +72,7 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 	if err != nil {
 		return err
 	}
-	store := memory.NewStore(pool)
+	store := memory.NewStore(pool.Inner())
 	if err := reg.Register(memory.RecallTool{Store: store}); err != nil {
 		return err
 	}
@@ -81,7 +81,7 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 	}
 
 	// Links (taste graph)
-	linkStore := links.NewStore(pool)
+	linkStore := links.NewStore(pool.Inner())
 	for _, t := range []tools.Tool{
 		links.SaveTool{Store: linkStore},
 		links.SearchTool{Store: linkStore},
@@ -176,7 +176,7 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 
 	// Mail tools
 	if len(cfg.Mail.Accounts) > 0 {
-		mstore := mail.NewStore(pool)
+		mstore := mail.NewStore(pool.Inner())
 		resolver := mailAccountResolver{}
 		for _, ac := range cfg.Mail.Accounts {
 			secret, err := config.ResolveSecret("env:" + ac.SecretEnv)

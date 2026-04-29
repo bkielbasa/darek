@@ -47,7 +47,7 @@ func runMailSync(ctx context.Context, cfgPath string, args []string) error {
 	}
 	defer pool.Close()
 
-	store := mail.NewStore(pool)
+	store := mail.NewStore(pool.Inner())
 	for _, ac := range cfg.Mail.Accounts {
 		if target != "" && target != ac.Nickname {
 			continue

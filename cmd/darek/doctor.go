@@ -26,7 +26,7 @@ func runMigrate(ctx context.Context, cfgPath string) error {
 		return err
 	}
 	defer pool.Close()
-	if err := db.Migrate(ctx, pool); err != nil {
+	if err := db.Migrate(ctx, pool.Inner()); err != nil {
 		return err
 	}
 	fmt.Println("migrations applied")
