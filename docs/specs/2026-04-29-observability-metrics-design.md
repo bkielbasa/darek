@@ -38,7 +38,7 @@ Every call that crosses the network or process boundary records:
 - `darek.dep.requests` — counter — labels: `dep`, `op`, `outcome`
 - `darek.dep.latency` — histogram (seconds) — labels: `dep`, `op`, `outcome`
 
-`dep` is one of: `openai_chat`, `openai_embeddings`, `google_calendar`, `todoist`, `freshrss`, `ical`, `imap`, `smtp`, `postgres`.
+`dep` is one of: `openai_chat`, `google_calendar`, `todoist`, `freshrss`, `ical`, `imap`, `smtp`, `postgres`. (Embeddings aren't wired today — links uses tsvector. `openai_embeddings` will join when it's used.)
 `op` is dep-specific (e.g., `imap`: `sync_folder` / `fetch_body` / `fetch_attachment` / `append`; `postgres`: `query` / `exec` / `tx_begin`; `openai_chat`: `chat`).
 `outcome` is `ok` or `error`.
 
@@ -157,7 +157,7 @@ Each panel links to the relevant detail dashboard.
 - `tools/mail/smtp/smtp.go` — wrap, bump `mail.sent`.
 - `db/pool.go` — register pool gauges after pool creation. Add a `db.Querier` wrapper used by all stores; the wrapper records `dep=postgres` metrics. (Choosing `Querier` wrapper over per-call-site instrumentation — one place, no drift.)
 - `memory/store.go` — bump `memory.notes_{saved,recalled}` in the right methods.
-- `links/store.go` — `Save` decides save_new vs save_update (already known there) and bumps `links.events{op=...}`; `Search`/`Similar` bump too. Embeddings call goes through `Dep("openai_embeddings","embed",...)`.
+- `links/store.go` — `Save` decides save_new vs save_update (already known there) and bumps `links.events{op=...}`; `Search`/`Similar` bump too.
 - `agent/agent.go` — bump `agent.max_iters_hit` in the existing max-iters branch.
 
 ### 5.3 Dashboards
