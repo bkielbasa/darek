@@ -29,6 +29,10 @@ freshrss:
   base_url: https://rss.example.com
   username: alice
   password_env: DAREK_FRESHRSS_PASSWORD
+  sync_interval: 15m       # how often the in-server loop polls (0 disables)
+
+server:
+  bind: 127.0.0.1:7777
 
 calendars:
   - kind: ical
