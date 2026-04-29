@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"darek/obs"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -60,36 +62,38 @@ func New(opt Options) (*Client, error) {
 // login obtains a SID via ClientLogin and caches it. Subsequent failures
 // (e.g. SID expired) trigger a re-login.
 func (c *Client) login(ctx context.Context) error {
-	form := url.Values{}
-	form.Set("Email", c.username)
-	form.Set("Passwd", c.password)
+	return obs.Dep(ctx, "freshrss", "login", func(ctx context.Context) error {
+		form := url.Values{}
+		form.Set("Email", c.username)
+		form.Set("Passwd", c.password)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.base+"/api/greader.php/accounts/ClientLogin",
-		strings.NewReader(form.Encode()))
-	if err != nil {
-		return fmt.Errorf("new request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return fmt.Errorf("clientlogin: %w", err)
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("clientlogin status %d: %s", resp.StatusCode, string(body))
-	}
-	// Body is line-oriented "KEY=VALUE\n" — find SID=...
-	for _, line := range strings.Split(string(body), "\n") {
-		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok && k == "SID" {
-			c.mu.Lock()
-			c.sid = v
-			c.mu.Unlock()
-			return nil
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			c.base+"/api/greader.php/accounts/ClientLogin",
+			strings.NewReader(form.Encode()))
+		if err != nil {
+			return fmt.Errorf("new request: %w", err)
 		}
-	}
-	return fmt.Errorf("clientlogin: SID not in response: %s", string(body))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return fmt.Errorf("clientlogin: %w", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("clientlogin status %d: %s", resp.StatusCode, string(body))
+		}
+		// Body is line-oriented "KEY=VALUE\n" — find SID=...
+		for _, line := range strings.Split(string(body), "\n") {
+			if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok && k == "SID" {
+				c.mu.Lock()
+				c.sid = v
+				c.mu.Unlock()
+				return nil
+			}
+		}
+		return fmt.Errorf("clientlogin: SID not in response: %s", string(body))
+	})
 }
 
 func (c *Client) currentSID() string {
@@ -181,14 +185,20 @@ func (c *Client) List(ctx context.Context, opts ListOpts) ([]Article, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.authedDo(ctx, req)
-	if err != nil {
+	var body []byte
+	if err := obs.Dep(ctx, "freshrss", "list", func(ctx context.Context) error {
+		resp, err := c.authedDo(ctx, req.WithContext(ctx))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		body, _ = io.ReadAll(resp.Body)
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("list status %d: %s", resp.StatusCode, string(body))
+		}
+		return nil
+	}); err != nil {
 		return nil, err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("list status %d: %s", resp.StatusCode, string(body))
 	}
 	var raw struct {
 		Items []struct {
@@ -252,14 +262,20 @@ func (c *Client) Get(ctx context.Context, id string) (*Article, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.authedDo(ctx, req)
-	if err != nil {
+	var body []byte
+	if err := obs.Dep(ctx, "freshrss", "get", func(ctx context.Context) error {
+		resp, err := c.authedDo(ctx, req.WithContext(ctx))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		body, _ = io.ReadAll(resp.Body)
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("get status %d: %s", resp.StatusCode, string(body))
+		}
+		return nil
+	}); err != nil {
 		return nil, err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode/100 != 2 {
-		return nil, fmt.Errorf("get status %d: %s", resp.StatusCode, string(body))
 	}
 	var raw struct {
 		Items []struct {
@@ -350,16 +366,18 @@ func (c *Client) Mark(ctx context.Context, id string, act Action) error {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.authedDo(ctx, req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("edit-tag status %d: %s", resp.StatusCode, string(body))
-	}
-	return nil
+	return obs.Dep(ctx, "freshrss", "mark", func(ctx context.Context) error {
+		resp, err := c.authedDo(ctx, req.WithContext(ctx))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("edit-tag status %d: %s", resp.StatusCode, string(body))
+		}
+		return nil
+	})
 }
 
 func (c *Client) editToken(ctx context.Context) (string, error) {
@@ -368,14 +386,21 @@ func (c *Client) editToken(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resp, err := c.authedDo(ctx, req)
-	if err != nil {
+	var token string
+	if err := obs.Dep(ctx, "freshrss", "token", func(ctx context.Context) error {
+		resp, err := c.authedDo(ctx, req.WithContext(ctx))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		b, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode/100 != 2 {
+			return fmt.Errorf("token status %d: %s", resp.StatusCode, string(b))
+		}
+		token = strings.TrimSpace(string(b))
+		return nil
+	}); err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode/100 != 2 {
-		return "", fmt.Errorf("token status %d: %s", resp.StatusCode, string(b))
-	}
-	return strings.TrimSpace(string(b)), nil
+	return token, nil
 }
