@@ -14,7 +14,9 @@ import (
 	"darek/links"
 	"darek/llm"
 	"darek/obs"
+	"darek/todoistimport"
 	"darek/tools/freshrss"
+	"darek/tools/todoist"
 )
 
 func runServe(ctx context.Context, cfgPath string) error {
@@ -99,14 +101,37 @@ func runServe(ctx context.Context, cfgPath string) error {
 		}
 	}
 
+	var todoistSync serve.SyncFn
+	if cfg.Todoist.TokenEnv != "" {
+		token, err := config.ResolveSecret("env:" + cfg.Todoist.TokenEnv)
+		if err == nil && token != "" {
+			td, err := todoist.New(todoist.Options{Token: token})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warn: todoist client: %v\n", err)
+			} else {
+				todoistSync = func(ctx context.Context) (string, error) {
+					res, err := todoistimport.Sync(ctx, td, store)
+					if err != nil {
+						return "", err
+					}
+					return fmt.Sprintf("imported=%d completed=%d skipped=%d errors=%d",
+						res.Imported, res.Completed, res.Skipped, len(res.Errors)), nil
+				}
+			}
+		}
+	}
+
 	srv, err := serve.New(store, sync, analyzer)
 	if err != nil {
 		return err
 	}
 
-	// Background sync loop (only if sync is configured AND interval > 0).
+	// Background sync loops (only if configured AND interval > 0).
 	if sync != nil && cfg.FreshRSS.SyncInterval > 0 {
 		go runSyncLoop(ctx, sync, cfg.FreshRSS.SyncInterval, "freshrss")
+	}
+	if todoistSync != nil && cfg.Todoist.SyncInterval > 0 {
+		go runSyncLoop(ctx, todoistSync, cfg.Todoist.SyncInterval, "todoist")
 	}
 
 	fmt.Fprintf(os.Stderr, "darek serve listening on %s\n", cfg.Server.Bind)
