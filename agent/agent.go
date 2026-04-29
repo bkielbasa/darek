@@ -113,6 +113,7 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 	}
 
 	if iters == a.maxIters {
+		a.m.AgentMaxItersHit.Add(ctx, 1)
 		err := fmt.Errorf("hit max iterations (%d) without final answer", a.maxIters)
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
