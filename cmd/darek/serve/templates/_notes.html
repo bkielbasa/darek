@@ -1,0 +1,11 @@
+{{define "_notes.html"}}
+<div class="notes" id="notes-{{.ID}}">
+  <details>
+    <summary>{{if .Notes}}{{.Notes}}{{else}}(no notes){{end}}</summary>
+    <form hx-post="/links/{{.ID}}/notes" hx-target="#notes-{{.ID}}" hx-swap="outerHTML">
+      <textarea name="notes">{{.Notes}}</textarea>
+      <button type="submit">save</button>
+    </form>
+  </details>
+</div>
+{{end}}

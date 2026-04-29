@@ -122,9 +122,22 @@ freshrss:
   base_url: https://rss.example.com
   username: alice
   password_env: DAREK_FRESHRSS_PASSWORD
+  sync_interval: 15m       # how often `darek serve` polls; 0 disables the in-server loop
 ```
 
-Use a FreshRSS **API password** (Settings → Profile → "API password"), not your account password. Tools enabled: `freshrss.list_articles`, `freshrss.get_article`, `freshrss.mark`.
+Use a FreshRSS **API password** (Settings → Profile → "API password"), not your account password. Tools enabled in chat: `freshrss.list_articles`, `freshrss.get_article`, `freshrss.mark`.
+
+### RSS inbox + web UI
+
+`darek serve` runs a local HTTP UI at `127.0.0.1:7777` (configurable via `server.bind`) for browsing imported FreshRSS articles, rating them, and adding tags/notes. The server also polls FreshRSS every `sync_interval` and marks articles read in FreshRSS once imported.
+
+For cron-driven sync without the server:
+
+```bash
+./darek freshrss sync
+```
+
+URL canonicalization (strip `utm_*`, `fbclid`, etc.) deduplicates the same article reaching darek through multiple sources. Each link is auto-classified (`article` / `video` / `tweet` / `podcast`) by URL heuristics; you can override the kind from the UI.
 
 ## Mail
 

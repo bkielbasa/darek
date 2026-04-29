@@ -13,6 +13,7 @@ type Config struct {
 	FreshRSS  FreshRSS      `yaml:"freshrss"`
 	Calendars []CalendarSrc `yaml:"calendars"`
 	Mail      Mail          `yaml:"mail"`
+	Server    Server        `yaml:"server"`
 }
 
 type OpenAI struct {
@@ -51,9 +52,14 @@ type Todoist struct {
 }
 
 type FreshRSS struct {
-	BaseURL     string `yaml:"base_url"`
-	Username    string `yaml:"username"`
-	PasswordEnv string `yaml:"password_env"`
+	BaseURL      string        `yaml:"base_url"`
+	Username     string        `yaml:"username"`
+	PasswordEnv  string        `yaml:"password_env"`
+	SyncInterval time.Duration `yaml:"sync_interval"`
+}
+
+type Server struct {
+	Bind string `yaml:"bind"` // e.g. 127.0.0.1:7777
 }
 
 type CalendarSrc struct {

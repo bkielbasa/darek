@@ -1,0 +1,9 @@
+{{define "_kind.html"}}
+<form class="kind {{.Kind}}" hx-post="/links/{{.ID}}/kind" hx-target="closest form" hx-swap="outerHTML">
+  <select name="kind" onchange="this.form.requestSubmit()">
+    {{range $k := .AllKinds}}
+      <option value="{{$k}}" {{if eq $k $.Kind}}selected{{end}}>{{$k}}</option>
+    {{end}}
+  </select>
+</form>
+{{end}}
