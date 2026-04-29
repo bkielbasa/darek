@@ -12,8 +12,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-// allowedDeps is the closed set of dep names. Any new dep must be added here
-// AND have an entry in allowedOps.
+// allowedDeps + allowedOps form the closed enum of label values for darek.dep.*
+// metrics. When new dep/op pairs are wired in (e.g. when Tasks 12/13 land new
+// Todoist/FreshRSS ops), update both maps — this test will fail otherwise.
 var allowedDeps = map[string]struct{}{
 	"openai_chat":     {},
 	"google_calendar": {},
@@ -79,22 +80,25 @@ func TestDep_OnlyAllowedLabels(t *testing.T) {
 
 func checkAttrs(t *testing.T, attrs []attribute.KeyValue, metricName string) {
 	t.Helper()
+	values := map[string]string{}
 	for _, kv := range attrs {
 		key := string(kv.Key)
 		if _, ok := allowedAttrKeys[key]; !ok {
 			t.Errorf("%s: unexpected label %q (only dep/op/outcome allowed)", metricName, key)
 			continue
 		}
-		v := kv.Value.AsString()
-		switch key {
-		case "dep":
-			if _, ok := allowedDeps[v]; !ok {
-				t.Errorf("%s: unknown dep %q", metricName, v)
-			}
-		case "outcome":
-			if v != "ok" && v != "error" {
-				t.Errorf("%s: outcome must be ok|error, got %q", metricName, v)
-			}
+		values[key] = kv.Value.AsString()
+	}
+	dep, op, outcome := values["dep"], values["op"], values["outcome"]
+	if _, ok := allowedDeps[dep]; !ok {
+		t.Errorf("%s: unknown dep %q (update allowedDeps in cardinality_test.go)", metricName, dep)
+	}
+	if ops, ok := allowedOps[dep]; ok {
+		if _, ok := ops[op]; !ok {
+			t.Errorf("%s: unknown op %q for dep %q (update allowedOps in cardinality_test.go)", metricName, op, dep)
 		}
+	}
+	if outcome != "ok" && outcome != "error" {
+		t.Errorf("%s: outcome must be ok|error, got %q", metricName, outcome)
 	}
 }
