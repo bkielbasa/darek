@@ -13,7 +13,16 @@
         </button>
       {{end}}
     </div>
+    {{if .AnalyzeEnabled}}
+      <span class="dot">·</span>
+      <button class="analyze" hx-post="/links/{{.ID}}/analyze" hx-target="#row-{{.ID}}" hx-swap="outerHTML" hx-indicator="#row-{{.ID}} .analyze">
+        {{if .AnalyzedAt}}re-analyze{{else}}analyze{{end}}
+      </button>
+    {{end}}
   </div>
+  {{if .Summary}}
+    <div class="summary">{{.Summary}}</div>
+  {{end}}
   <div class="tags" id="tags-{{.ID}}">
     {{range .Tags}}
       <span class="tag">{{.}}

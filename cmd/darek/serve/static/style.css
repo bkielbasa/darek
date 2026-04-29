@@ -250,6 +250,7 @@ form.filters select {
   grid-template-areas:
     "kind  title"
     ".     meta"
+    ".     summary"
     ".     tags"
     ".     notes";
   column-gap: .75rem;
@@ -452,4 +453,37 @@ form.kind select:focus { box-shadow: none; }
     column-gap: .55rem;
     padding: .75rem .8rem;
   }
+}
+
+/* analyze button + summary block */
+.row .summary {
+  grid-area: summary;
+  font-size: .9rem;
+  line-height: 1.5;
+  color: var(--text-dim);
+  font-style: italic;
+  border-left: 2px solid var(--border);
+  padding: .15rem 0 .15rem .65rem;
+}
+
+.meta button.analyze {
+  font-size: .78rem;
+  padding: .15rem .55rem;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all .12s;
+}
+.meta button.analyze:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.meta button.analyze.htmx-request {
+  pointer-events: none;
+  opacity: .6;
+}
+.meta button.analyze.htmx-request::after {
+  content: " …";
 }
