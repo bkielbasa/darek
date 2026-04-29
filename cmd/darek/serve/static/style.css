@@ -29,30 +29,31 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1a1a1a;
-    --surface: #232323;
-    --surface-2: #2c2c2c;
-    --text: #e8e6df;
-    --text-dim: #a8a59c;
-    --text-faint: #6f6c64;
-    --border: #353330;
-    --accent: #e08866;
-    --accent-soft: #3a2820;
-    --rating: #e08866;
-    --link: #e8e6df;
-    --link-hover: #e08866;
-    --shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+    /* Tokyo Night palette */
+    --bg: #1a1b26;
+    --surface: #24283b;
+    --surface-2: #2f334d;
+    --text: #c0caf5;
+    --text-dim: #9aa5ce;
+    --text-faint: #565f89;
+    --border: #3b4261;
+    --accent: #bb9af7;       /* lavender */
+    --accent-soft: #322b4d;
+    --rating: #e0af68;       /* warm amber stars */
+    --link: #c0caf5;
+    --link-hover: #bb9af7;
+    --shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
 
-    --kind-article: #3a342a;
-    --kind-article-fg: #d4c8a8;
-    --kind-video:   #4a2820;
-    --kind-video-fg: #f0b8ad;
-    --kind-tweet:   #1f3550;
-    --kind-tweet-fg: #b0cae5;
-    --kind-podcast: #2a4528;
-    --kind-podcast-fg: #b8d6b6;
-    --kind-other:   #353330;
-    --kind-other-fg: #b0adA5;
+    --kind-article: #2f334d;
+    --kind-article-fg: #a9b1d6;
+    --kind-video:   #3a2638;
+    --kind-video-fg: #f7768e;
+    --kind-tweet:   #1f3050;
+    --kind-tweet-fg: #7aa2f7;
+    --kind-podcast: #1f3a30;
+    --kind-podcast-fg: #9ece6a;
+    --kind-other:   #2f334d;
+    --kind-other-fg: #9aa5ce;
   }
 }
 
