@@ -275,3 +275,38 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
+
+// handleKind updates the kind field for a link and returns the re-rendered kind widget.
+func (s *Server) handleKind(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	kind := r.FormValue("kind")
+	switch kind {
+	case "article", "video", "tweet", "podcast", "other":
+	default:
+		http.Error(w, "bad kind", http.StatusBadRequest)
+		return
+	}
+	_, err = s.store.Pool().Exec(r.Context(),
+		`UPDATE links SET kind = $2, updated_at = now() WHERE id = $1`,
+		id, kind)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	cur, err := s.fetchOne(r.Context(), id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := s.tmpl.ExecuteTemplate(w, "_kind.html", toLinkVM(cur)); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+	}
+}
