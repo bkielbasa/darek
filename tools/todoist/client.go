@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"time"
 
+	"darek/obs"
+
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -92,7 +94,7 @@ func (c *Client) ListTasks(ctx context.Context, f ListFilter) ([]Task, error) {
 		q.Set("label", f.Label)
 	}
 	var env listEnvelope
-	if err := c.doJSON(ctx, http.MethodGet, path+"?"+q.Encode(), nil, &env); err != nil {
+	if err := c.doJSON(ctx, "list_tasks", http.MethodGet, path+"?"+q.Encode(), nil, &env); err != nil {
 		return nil, err
 	}
 	return env.Results, nil
@@ -110,14 +112,14 @@ type CreateRequest struct {
 
 func (c *Client) CreateTask(ctx context.Context, req CreateRequest) (*Task, error) {
 	var out Task
-	if err := c.doJSON(ctx, http.MethodPost, "/tasks", req, &out); err != nil {
+	if err := c.doJSON(ctx, "create_task", http.MethodPost, "/tasks", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 func (c *Client) CompleteTask(ctx context.Context, id string) error {
-	return c.doJSON(ctx, http.MethodPost, "/tasks/"+id+"/close", nil, nil)
+	return c.doJSON(ctx, "complete_task", http.MethodPost, "/tasks/"+id+"/close", nil, nil)
 }
 
 type UpdateRequest struct {
@@ -130,13 +132,13 @@ type UpdateRequest struct {
 
 func (c *Client) UpdateTask(ctx context.Context, id string, req UpdateRequest) (*Task, error) {
 	var out Task
-	if err := c.doJSON(ctx, http.MethodPost, "/tasks/"+id, req, &out); err != nil {
+	if err := c.doJSON(ctx, "update_task", http.MethodPost, "/tasks/"+id, req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-func (c *Client) doJSON(ctx context.Context, method, path string, body, out any) error {
+func (c *Client) doJSON(ctx context.Context, op, method, path string, body, out any) error {
 	var rdr io.Reader
 	if body != nil {
 		b, err := json.Marshal(body)
@@ -153,21 +155,23 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body, out any)
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return fmt.Errorf("http: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode/100 != 2 {
-		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("todoist %s %s: status %d: %s", method, path, resp.StatusCode, string(b))
-	}
-	if out == nil {
-		_, _ = io.Copy(io.Discard, resp.Body)
+	return obs.Dep(ctx, "todoist", op, func(ctx context.Context) error {
+		resp, err := c.http.Do(req.WithContext(ctx))
+		if err != nil {
+			return fmt.Errorf("http: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			b, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("todoist %s %s: status %d: %s", method, path, resp.StatusCode, string(b))
+		}
+		if out == nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			return nil
+		}
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			return fmt.Errorf("decode: %w", err)
+		}
 		return nil
-	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
-		return fmt.Errorf("decode: %w", err)
-	}
-	return nil
+	})
 }
