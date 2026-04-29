@@ -276,6 +276,63 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleNew handles the manual-add form: canonicalises and classifies the URL
+// via links.IngestOne, optionally applies comma-separated tags, then redirects
+// back to the queue.
+func (s *Server) handleNew(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	rawURL := strings.TrimSpace(r.FormValue("url"))
+	if rawURL == "" {
+		http.Error(w, "url required", http.StatusBadRequest)
+		return
+	}
+	tags := splitCSV(r.FormValue("tags"))
+
+	id, _, err := links.IngestOne(r.Context(), s.store, links.Candidate{
+		URL:    rawURL,
+		Source: "user",
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(tags) > 0 {
+		// Direct UPDATE — Save's "leave alone if empty" semantics make a
+		// generic Save call awkward when the only change is appending tags.
+		_, _ = s.store.Pool().Exec(r.Context(),
+			`UPDATE links SET tags = ARRAY(SELECT DISTINCT unnest(tags || $2::text[])), updated_at = now() WHERE id = $1`,
+			id, tags)
+	}
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
+	if s.sync == nil {
+		http.Error(w, "sync not configured", http.StatusNotImplemented)
+		return
+	}
+	msg, err := s.sync(r.Context())
+	if err != nil {
+		fmt.Fprintf(w, "sync failed: %v", err)
+		return
+	}
+	fmt.Fprintf(w, "sync ok: %s", msg)
+}
+
+func splitCSV(s string) []string {
+	out := []string{}
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(strings.ToLower(p))
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 // handleKind updates the kind field for a link and returns the re-rendered kind widget.
 func (s *Server) handleKind(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(r.PathValue("id"))

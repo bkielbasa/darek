@@ -13,20 +13,23 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
+type SyncFn func(ctx context.Context) (string, error)
+
 // Server is the HTTP UI for browsing and rating links.
 type Server struct {
 	store *links.Store
 	tmpl  *template.Template
 	mux   *http.ServeMux
+	sync  SyncFn
 }
 
-// New constructs a Server. Templates are parsed once at construction time.
-func New(store *links.Store) (*Server, error) {
+// New constructs a Server. If sync is nil, the /sync route returns 501.
+func New(store *links.Store, sync SyncFn) (*Server, error) {
 	t, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, tmpl: t, mux: http.NewServeMux()}
+	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync}
 	s.routes()
 	return s, nil
 }
@@ -49,6 +52,8 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /{$}", s.handleList(true))  // queue
 	s.mux.Handle("GET /all", s.handleList(false)) // archive
 
+	s.mux.HandleFunc("POST /sync", s.handleSync)
+	s.mux.HandleFunc("POST /links/new", s.handleNew)
 	s.mux.HandleFunc("POST /links/{id}/rating", s.handleRating)
 	s.mux.HandleFunc("POST /links/{id}/tags", s.handleTags)
 	s.mux.HandleFunc("POST /links/{id}/notes", s.handleNotes)

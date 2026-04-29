@@ -7,6 +7,12 @@
 {{define "content"}}
 <h1>{{.PageTitle}}</h1>
 
+<form method="post" action="/links/new" class="add-link">
+  <input type="url" name="url" placeholder="paste a url to add" required>
+  <input type="text" name="tags" placeholder="tags (comma-separated)">
+  <button type="submit">add</button>
+</form>
+
 <form method="get" action="{{.Path}}" class="filters">
   <input type="search" name="q" placeholder="search…" value="{{.Query.Q}}">
   <select name="kind">
