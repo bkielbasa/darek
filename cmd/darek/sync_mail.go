@@ -49,7 +49,7 @@ func runMailSync(ctx context.Context, cfgPath string, args []string) error {
 	defer pool.Close()
 
 	if err := obs.RegisterPoolGauges(pool); err != nil {
-		// Best-effort: pool gauges are nice-to-have, never block startup.
+		fmt.Fprintf(os.Stderr, "warn: register pool gauges: %v\n", err)
 	}
 
 	store := mail.NewStore(pool.Inner())
