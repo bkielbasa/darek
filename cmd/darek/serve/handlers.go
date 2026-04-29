@@ -159,6 +159,8 @@ func (s *Server) handleList(queueOnly bool) http.HandlerFunc {
 		opts := links.SearchOpts{
 			Query:     q.Q,
 			MinRating: q.MinRating,
+			Kind:      q.Kind,
+			Feed:      q.Feed,
 			Limit:     100,
 		}
 		got, err := s.store.Search(r.Context(), opts)
@@ -169,12 +171,6 @@ func (s *Server) handleList(queueOnly bool) http.HandlerFunc {
 		var rows []linkVM
 		for _, l := range got {
 			if queueOnly && l.Rating != nil {
-				continue
-			}
-			if q.Kind != "" && l.Kind != q.Kind {
-				continue
-			}
-			if q.Feed != "" && l.Feed != q.Feed {
 				continue
 			}
 			rows = append(rows, toLinkVM(l))
@@ -290,6 +286,7 @@ func (s *Server) handleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	tags := splitCSV(r.FormValue("tags"))
+	notes := strings.TrimSpace(r.FormValue("notes"))
 
 	id, _, err := links.IngestOne(r.Context(), s.store, links.Candidate{
 		URL:    rawURL,
@@ -300,11 +297,14 @@ func (s *Server) handleNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(tags) > 0 {
-		// Direct UPDATE — Save's "leave alone if empty" semantics make a
-		// generic Save call awkward when the only change is appending tags.
 		_, _ = s.store.Pool().Exec(r.Context(),
 			`UPDATE links SET tags = ARRAY(SELECT DISTINCT unnest(tags || $2::text[])), updated_at = now() WHERE id = $1`,
 			id, tags)
+	}
+	if notes != "" {
+		_, _ = s.store.Pool().Exec(r.Context(),
+			`UPDATE links SET notes = $2, updated_at = now() WHERE id = $1`,
+			id, notes)
 	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

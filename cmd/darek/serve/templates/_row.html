@@ -1,6 +1,6 @@
 {{define "_row.html"}}
 <div class="row" id="row-{{.ID}}">
-  <span class="kind {{.Kind}}">{{.Kind}}</span>
+  {{template "_kind.html" .}}
   {{if .Feed}}<span class="meta">{{.Feed}}</span>{{end}}
   <a href="{{.URL}}" target="_blank" rel="noopener">{{if .Title}}{{.Title}}{{else}}{{.URL}}{{end}}</a>
   <span class="meta">· {{.RelTime}}</span>

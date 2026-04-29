@@ -166,6 +166,8 @@ type SearchOpts struct {
 	MinRating int      // 0 = no constraint
 	Tags      []string // ALL of these required (lowercased)
 	Source    string   // optional filter
+	Kind      string   // optional filter ("article"|"video"|"tweet"|"podcast"|"other")
+	Feed      string   // optional filter — exact match
 	Since     time.Time
 	Limit     int
 }
@@ -193,6 +195,14 @@ func (s *Store) Search(ctx context.Context, o SearchOpts) ([]Link, error) {
 	if o.Source != "" {
 		args = append(args, o.Source)
 		conds = append(conds, fmt.Sprintf("source = $%d", len(args)))
+	}
+	if o.Kind != "" {
+		args = append(args, o.Kind)
+		conds = append(conds, fmt.Sprintf("kind = $%d", len(args)))
+	}
+	if o.Feed != "" {
+		args = append(args, o.Feed)
+		conds = append(conds, fmt.Sprintf("feed = $%d", len(args)))
 	}
 	if !o.Since.IsZero() {
 		args = append(args, o.Since)
