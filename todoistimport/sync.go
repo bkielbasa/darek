@@ -15,9 +15,14 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"golang.org/x/sync/errgroup"
 )
 
 var tracer = otel.Tracer("darek/todoistimport")
+
+// concurrency is the maximum number of tasks processed in parallel by Sync.
+// Bounded so we don't hammer Todoist's rate limit or exhaust the pgx pool.
+const concurrency = 5
 
 // Lister is the subset of *todoist.Client used by Sync. Defined as an
 // interface so tests can supply a fake.
@@ -82,45 +87,33 @@ func Sync(ctx context.Context, c Lister, store *links.Store) (*Result, error) {
 		return nil, fmt.Errorf("list inbox: %w", err)
 	}
 
-	for _, t := range tasks {
-		rawURL := extractURL(t.Content, t.Description)
-		if rawURL == "" {
-			res.Skipped++
-			continue
-		}
-		title := strings.TrimSpace(strings.ReplaceAll(t.Content, rawURL, ""))
-		if title == "" {
-			title = rawURL
-		}
-		id, _, err := links.IngestOne(ctx, store, links.Candidate{
-			URL:     rawURL,
-			Title:   title,
-			Source:  "todoist",
-			Summary: links.StripHTML(t.Description),
+	// Process tasks in parallel with a bounded worker pool. Each goroutine
+	// writes to its own index in `outcomes` so no mutex is needed; the loop
+	// after Wait aggregates into res.
+	outcomes := make([]taskOutcome, len(tasks))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(concurrency)
+	for i, t := range tasks {
+		g.Go(func() error {
+			outcomes[i] = processTask(gctx, c, store, t)
+			return nil // never abort siblings — per-item errors are collected
 		})
-		if err != nil {
-			res.Errors = append(res.Errors, fmt.Errorf("ingest %s: %w", t.ID, err))
-			continue
-		}
-		res.Imported++
+	}
+	_ = g.Wait()
 
-		if len(t.Labels) > 0 {
-			tags := normalizeLabels(t.Labels)
-			if len(tags) > 0 {
-				if _, err := store.Pool().Exec(ctx,
-					`UPDATE links SET tags = ARRAY(SELECT DISTINCT unnest(tags || $2::text[])), updated_at = now() WHERE id = $1`,
-					id, tags); err != nil {
-					res.Errors = append(res.Errors, fmt.Errorf("merge labels %s: %w", t.ID, err))
-					continue
-				}
+	for _, o := range outcomes {
+		switch {
+		case o.Skipped:
+			res.Skipped++
+		case o.Imported:
+			res.Imported++
+			if o.Completed {
+				res.Completed++
 			}
 		}
-
-		if err := c.CompleteTask(ctx, t.ID); err != nil {
-			res.Errors = append(res.Errors, fmt.Errorf("complete %s: %w", t.ID, err))
-			continue
+		if o.Err != nil {
+			res.Errors = append(res.Errors, o.Err)
 		}
-		res.Completed++
 	}
 
 	outcome := "ok"
@@ -135,6 +128,54 @@ func Sync(ctx context.Context, c Lister, store *links.Store) (*Result, error) {
 	)
 	recordDuration(ctx, start, outcome)
 	return res, nil
+}
+
+// taskOutcome is the per-task result populated by processTask. Goroutines
+// write into a fixed-index slice so no mutex is needed.
+type taskOutcome struct {
+	Imported  bool
+	Completed bool
+	Skipped   bool
+	Err       error
+}
+
+// processTask runs the ingest/label/complete pipeline for a single task and
+// returns its outcome. Pure function over (ctx, c, store, t); safe to call
+// concurrently for distinct tasks.
+func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Task) taskOutcome {
+	rawURL := extractURL(t.Content, t.Description)
+	if rawURL == "" {
+		return taskOutcome{Skipped: true}
+	}
+	title := strings.TrimSpace(strings.ReplaceAll(t.Content, rawURL, ""))
+	if title == "" {
+		title = rawURL
+	}
+	id, _, err := links.IngestOne(ctx, store, links.Candidate{
+		URL:     rawURL,
+		Title:   title,
+		Source:  "todoist",
+		Summary: links.StripHTML(t.Description),
+	})
+	if err != nil {
+		return taskOutcome{Err: fmt.Errorf("ingest %s: %w", t.ID, err)}
+	}
+
+	if len(t.Labels) > 0 {
+		tags := normalizeLabels(t.Labels)
+		if len(tags) > 0 {
+			if _, err := store.Pool().Exec(ctx,
+				`UPDATE links SET tags = ARRAY(SELECT DISTINCT unnest(tags || $2::text[])), updated_at = now() WHERE id = $1`,
+				id, tags); err != nil {
+				return taskOutcome{Imported: true, Err: fmt.Errorf("merge labels %s: %w", t.ID, err)}
+			}
+		}
+	}
+
+	if err := c.CompleteTask(ctx, t.ID); err != nil {
+		return taskOutcome{Imported: true, Err: fmt.Errorf("complete %s: %w", t.ID, err)}
+	}
+	return taskOutcome{Imported: true, Completed: true}
 }
 
 func recordDuration(ctx context.Context, start time.Time, outcome string) {
