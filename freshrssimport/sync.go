@@ -13,9 +13,14 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"golang.org/x/sync/errgroup"
 )
 
 var tracer = otel.Tracer("darek/freshrssimport")
+
+// concurrency is the maximum number of articles processed in parallel by Sync.
+// Bounded so we don't hammer FreshRSS or exhaust the pgx pool.
+const concurrency = 5
 
 // Lister is the subset of *freshrss.Client used by Sync. Defined as an
 // interface so tests can supply a fake.
@@ -51,28 +56,33 @@ func Sync(ctx context.Context, fr Lister, store *links.Store) (*Result, error) {
 		return nil, fmt.Errorf("list unread: %w", err)
 	}
 
-	for _, a := range arts {
-		if a.URL == "" {
-			res.Skipped++
-			continue
-		}
-		_, _, err := links.IngestOne(ctx, store, links.Candidate{
-			URL:     a.URL,
-			Title:   a.Title,
-			Source:  "freshrss",
-			Feed:    a.Feed,
-			Summary: a.Summary,
+	// Process articles in parallel with a bounded worker pool. Each goroutine
+	// writes to its own index in `outcomes` so no mutex is needed; the loop
+	// after Wait aggregates into res.
+	outcomes := make([]articleOutcome, len(arts))
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(concurrency)
+	for i, a := range arts {
+		g.Go(func() error {
+			outcomes[i] = processArticle(gctx, fr, store, a)
+			return nil // never abort siblings — per-item errors are collected
 		})
-		if err != nil {
-			res.Errors = append(res.Errors, fmt.Errorf("ingest %s: %w", a.ID, err))
-			continue
+	}
+	_ = g.Wait()
+
+	for _, o := range outcomes {
+		switch {
+		case o.Skipped:
+			res.Skipped++
+		case o.Imported:
+			res.Imported++
+			if o.MarkedRead {
+				res.MarkedRead++
+			}
 		}
-		res.Imported++
-		if err := fr.Mark(ctx, a.ID, freshrss.ActionMarkRead); err != nil {
-			res.Errors = append(res.Errors, fmt.Errorf("mark %s read: %w", a.ID, err))
-			continue
+		if o.Err != nil {
+			res.Errors = append(res.Errors, o.Err)
 		}
-		res.MarkedRead++
 	}
 
 	outcome := "ok"
@@ -87,6 +97,38 @@ func Sync(ctx context.Context, fr Lister, store *links.Store) (*Result, error) {
 	)
 	recordDuration(ctx, start, outcome)
 	return res, nil
+}
+
+// articleOutcome is the per-article result populated by processArticle.
+// Goroutines write into a fixed-index slice so no mutex is needed.
+type articleOutcome struct {
+	Imported   bool
+	MarkedRead bool
+	Skipped    bool
+	Err        error
+}
+
+// processArticle runs the ingest/mark-read pipeline for a single article and
+// returns its outcome. Pure function over (ctx, fr, store, a); safe to call
+// concurrently for distinct articles.
+func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshrss.Article) articleOutcome {
+	if a.URL == "" {
+		return articleOutcome{Skipped: true}
+	}
+	_, _, err := links.IngestOne(ctx, store, links.Candidate{
+		URL:     a.URL,
+		Title:   a.Title,
+		Source:  "freshrss",
+		Feed:    a.Feed,
+		Summary: a.Summary,
+	})
+	if err != nil {
+		return articleOutcome{Err: fmt.Errorf("ingest %s: %w", a.ID, err)}
+	}
+	if err := fr.Mark(ctx, a.ID, freshrss.ActionMarkRead); err != nil {
+		return articleOutcome{Imported: true, Err: fmt.Errorf("mark %s read: %w", a.ID, err)}
+	}
+	return articleOutcome{Imported: true, MarkedRead: true}
 }
 
 func recordDuration(ctx context.Context, start time.Time, outcome string) {
