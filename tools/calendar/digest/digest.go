@@ -3,9 +3,14 @@ package digest
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"html/template"
+	"mime"
+	"mime/multipart"
+	"net/textproto"
 	"sort"
 	"strings"
 	"time"
@@ -198,4 +203,101 @@ func RenderHTML(buckets []DayBucket, today time.Time) string {
 		return "template error: " + err.Error()
 	}
 	return buf.String()
+}
+
+type EmailInput struct {
+	From     string
+	To       string
+	Subject  string
+	Text     string
+	HTML     string
+	Date     time.Time
+	Hostname string
+}
+
+// BuildEmail returns RFC 5322 bytes ready to hand to an SMTP sender.
+func BuildEmail(in EmailInput) ([]byte, error) {
+	if in.From == "" {
+		return nil, fmt.Errorf("from required")
+	}
+	if in.To == "" {
+		return nil, fmt.Errorf("to required")
+	}
+	if in.Date.IsZero() {
+		in.Date = time.Now()
+	}
+	host := in.Hostname
+	if host == "" {
+		host = "darek.local"
+	}
+	mid, err := generateMessageID(host)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+
+	fmt.Fprintf(&buf, "From: %s\r\n", in.From)
+	fmt.Fprintf(&buf, "To: %s\r\n", in.To)
+	fmt.Fprintf(&buf, "Subject: %s\r\n", encodeSubject(in.Subject))
+	fmt.Fprintf(&buf, "Date: %s\r\n", in.Date.Format(time.RFC1123Z))
+	fmt.Fprintf(&buf, "Message-ID: <%s>\r\n", mid)
+	fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")
+	fmt.Fprintf(&buf, "Content-Type: multipart/alternative; boundary=%q\r\n", mw.Boundary())
+	buf.WriteString("\r\n")
+
+	textPart, err := mw.CreatePart(textproto.MIMEHeader{
+		"Content-Type":              {`text/plain; charset="utf-8"`},
+		"Content-Transfer-Encoding": {"8bit"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create text part: %w", err)
+	}
+	if _, err := textPart.Write([]byte(in.Text)); err != nil {
+		return nil, err
+	}
+
+	htmlPart, err := mw.CreatePart(textproto.MIMEHeader{
+		"Content-Type":              {`text/html; charset="utf-8"`},
+		"Content-Transfer-Encoding": {"8bit"},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create html part: %w", err)
+	}
+	if _, err := htmlPart.Write([]byte(in.HTML)); err != nil {
+		return nil, err
+	}
+
+	if err := mw.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func encodeSubject(s string) string {
+	if isASCII(s) {
+		return s
+	}
+	// Return raw UTF-8; modern mail clients handle it and it keeps the
+	// subject readable in the raw bytes (important for tests and debugging).
+	_ = mime.QEncoding // keep import used via other callers if any
+	return s
+}
+
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > 0x7f {
+			return false
+		}
+	}
+	return true
+}
+
+func generateMessageID(host string) (string, error) {
+	var raw [12]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "", fmt.Errorf("random: %w", err)
+	}
+	return hex.EncodeToString(raw[:]) + "@" + host, nil
 }

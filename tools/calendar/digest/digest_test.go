@@ -189,3 +189,32 @@ func TestRenderHTML_NicknameColorIsDeterministic(t *testing.T) {
 	require.NotEqual(t, c1, c3)
 	require.Regexp(t, `^#[0-9a-fA-F]{6}$`, c1)
 }
+
+func TestBuildEmail_HasRequiredHeadersAndBothParts(t *testing.T) {
+	out, err := BuildEmail(EmailInput{
+		From:     "me@example.com",
+		To:       "you@example.com",
+		Subject:  "Calendar — 2026-05-01",
+		Text:     "plain body",
+		HTML:     "<html><body>html body</body></html>",
+		Date:     time.Date(2026, 5, 1, 7, 0, 0, 0, time.UTC),
+		Hostname: "example.com",
+	})
+	require.NoError(t, err)
+	s := string(out)
+	require.Contains(t, s, "From: me@example.com")
+	require.Contains(t, s, "To: you@example.com")
+	require.Contains(t, s, "Subject: Calendar")
+	require.Contains(t, s, "MIME-Version: 1.0")
+	require.Contains(t, s, "Content-Type: multipart/alternative")
+	require.Contains(t, s, "plain body")
+	require.Contains(t, s, "<html><body>html body</body></html>")
+	require.Contains(t, s, "Message-ID: <")
+}
+
+func TestBuildEmail_RequiresFromAndTo(t *testing.T) {
+	_, err := BuildEmail(EmailInput{To: "you@example.com", Text: "x", HTML: "x"})
+	require.Error(t, err)
+	_, err = BuildEmail(EmailInput{From: "me@example.com", Text: "x", HTML: "x"})
+	require.Error(t, err)
+}
