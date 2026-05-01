@@ -349,3 +349,46 @@ func formatCreatedOrUpdated(ev Event) string {
 	fmt.Fprintf(&b, "\nuid: %s", ev.UID)
 	return b.String()
 }
+
+type DeleteEventTool struct {
+	Sources *Sources
+}
+
+func (DeleteEventTool) Name() string { return "calendar.delete_event" }
+func (DeleteEventTool) Description() string {
+	return "Delete a calendar event by UID."
+}
+func (DeleteEventTool) JSONSchema() json.RawMessage {
+	return json.RawMessage(`{
+		"type":"object",
+		"properties":{
+			"calendar":{"type":"string"},
+			"uid":{"type":"string"},
+			"send_invites":{"type":"boolean","default":false}
+		},
+		"required":["calendar","uid"]
+	}`)
+}
+
+func (t DeleteEventTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	var p struct {
+		Calendar    string `json:"calendar"`
+		UID         string `json:"uid"`
+		SendInvites bool   `json:"send_invites"`
+	}
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &p); err != nil {
+			return "", fmt.Errorf("parse args: %w", err)
+		}
+	}
+	if p.Calendar == "" {
+		return "", fmt.Errorf("calendar: required")
+	}
+	if p.UID == "" {
+		return "", fmt.Errorf("uid: required")
+	}
+	if err := t.Sources.Delete(ctx, p.Calendar, p.UID, p.SendInvites); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("deleted: %s from %s", p.UID, p.Calendar), nil
+}

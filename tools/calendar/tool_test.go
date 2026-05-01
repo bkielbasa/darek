@@ -261,3 +261,55 @@ func TestUpdateEventTool_AllDayWithDatetime(t *testing.T) {
 	require.Contains(t, err.Error(), "all_day requires YYYY-MM-DD")
 	require.Empty(t, w.updates)
 }
+
+func TestDeleteEventTool_HappyPath(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	args := json.RawMessage(`{"calendar":"work","uid":"abc","send_invites":true}`)
+	out, err := DeleteEventTool{Sources: s}.Execute(context.Background(), args)
+	require.NoError(t, err)
+	require.Equal(t, `deleted: abc from work`, out)
+
+	require.Len(t, w.deletes, 1)
+	require.Equal(t, "abc", w.deletes[0].UID)
+	require.True(t, w.deletes[0].SendInvites)
+}
+
+func TestDeleteEventTool_DefaultSendInvitesFalse(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	_, err := DeleteEventTool{Sources: s}.Execute(context.Background(),
+		json.RawMessage(`{"calendar":"work","uid":"abc"}`))
+	require.NoError(t, err)
+	require.False(t, w.deletes[0].SendInvites)
+}
+
+func TestDeleteEventTool_RequiredFields(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	for name, body := range map[string]string{
+		"missing calendar": `{"uid":"abc"}`,
+		"missing uid":      `{"calendar":"work"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := DeleteEventTool{Sources: s}.Execute(context.Background(), json.RawMessage(body))
+			require.Error(t, err)
+		})
+	}
+	require.Empty(t, w.deletes)
+}
+
+func TestDeleteEventTool_ReadOnlyCalendar(t *testing.T) {
+	s := NewSources()
+	require.NoError(t, s.Add(fakeSrc{name: "feed"}))
+	_, err := DeleteEventTool{Sources: s}.Execute(context.Background(),
+		json.RawMessage(`{"calendar":"feed","uid":"abc"}`))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read-only")
+}
