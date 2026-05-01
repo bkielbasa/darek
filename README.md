@@ -1,7 +1,8 @@
 # darek
 
-A Go personal-assistant CLI. Talks to OpenAI, remembers things in Postgres, fully observable.
-First plan ships **memory only** — calendars, Todoist, mail land in subsequent plans.
+A Go personal-assistant CLI. Talks to OpenAI, remembers things in Postgres, integrates with Google Calendar / iCal feeds / Todoist / FreshRSS / IMAP+SMTP, and is fully observable (OTEL traces + Prom metrics).
+
+The agent is invoked via `./darek "your prompt"` and can call any of the tools below. Most data sources also have direct CLI subcommands so they can be driven from cron without an LLM in the loop.
 
 ## Quickstart
 
@@ -34,6 +35,46 @@ set -a; source ~/.darek/secrets.env; set +a
 
 Open Grafana at <http://localhost:3000> (anonymous admin) and look at the `darek` folder.
 Open Jaeger at <http://localhost:16686>.
+
+## Subcommand reference
+
+| Command | What it does |
+|---|---|
+| `darek` *(or `darek chat`)* | Default. Send a prompt to the agent; it picks tools as needed. |
+| `darek "<prompt>"` | One-shot agent run. |
+| `darek migrate` | Apply embedded SQL migrations to Postgres. |
+| `darek doctor` | Health check (Postgres, OTEL, OpenAI, configured sources). |
+| `darek serve` | HTTP server on `127.0.0.1:7777` (RSS inbox UI + background pollers). |
+| `darek calendar refresh-token <nickname>` | Run the Google OAuth flow for one configured Google calendar. |
+| `darek calendar daily-digest` | Send a 3-day calendar digest email (today + 2 days). |
+| `darek mail sync [--account=<nickname>]` | Pull new envelopes from IMAP into Postgres. |
+| `darek freshrss sync` | Pull unread FreshRSS articles into the local link store. |
+| `darek todoist sync` | Import any #Inbox tasks containing URLs and complete them in Todoist. |
+
+## Agent tools
+
+These are the tools the agent can call inside `darek chat`. Each is gated on relevant config being present.
+
+**Memory**
+- `memory.save(text, tags?)` — write a note.
+- `memory.recall(query)` — search prior notes.
+
+**Links (taste graph)**
+- `links.save(url, rating?, tags?, notes?)` — save/update by URL; tags merge by default.
+- `links.search(query?, min_rating?, tags?, since?)` — full-text + filters.
+- `links.similar(text)` — finds your rated links most similar to a piece of text.
+
+**Calendar**
+- `calendar.list_events(from?, to?, calendar?)` — list events; empty `calendar` = all sources.
+- `calendar.create_event(calendar, summary, start, end?, all_day?, description?, location?, attendees?, send_invites?)` — create an event on a writable (Google) calendar. Returns the new event's UID.
+- `calendar.update_event(calendar, uid, …)` — PATCH semantics: only fields present are changed. `attendees: []` clears the list; `attendees` absent leaves it. Operates on the instance UID returned by `list_events`.
+- `calendar.delete_event(calendar, uid, send_invites?)` — delete by UID. iCal sources are read-only and return a `read-only` error.
+
+**Todoist**: `todoist.list_tasks`, `todoist.create_task`, `todoist.complete_task`, `todoist.update_task`.
+
+**FreshRSS**: `freshrss.list_articles`, `freshrss.get_article`, `freshrss.mark`.
+
+**Mail**: `mail.search`, `mail.get_body`, `mail.get_attachment`, `mail.send` (`send` prompts on stderr for `y/N` confirmation).
 
 ## Layout
 
@@ -80,7 +121,7 @@ Example:
 
 ## Calendars
 
-Calendars are read-only. Add sources to `~/.darek/config.yaml`:
+Two source kinds: `ical` (read-only HTTP iCal feeds) and `google` (read + write via OAuth).
 
 ```yaml
 calendars:
@@ -101,6 +142,30 @@ For Google calendars, run the OAuth flow once per nickname:
 ```
 
 The CLI prints an auth URL; visit it, paste back the code, the token is saved to `~/.darek/oauth/<nickname>.json`.
+
+The OAuth scope is `CalendarEventsScope` (read + create/update/delete events). Existing tokens minted with the older read-only scope must re-run `refresh-token` once to gain write access.
+
+### Daily digest email
+
+Sends an HTML+plaintext digest of all events from all configured calendars for **today + the next 2 days** (3 calendar days, local timezone) to a single recipient via one of your configured mail accounts.
+
+```yaml
+calendar_digest:
+  to: bart@example.com           # required
+  from_account: personal         # required: nickname from mail.accounts
+  subject: "Calendar — {{date}}" # optional; default "Calendar — <YYYY-MM-DD>"
+                                 # the {{date}} token expands to the window start (ISO).
+```
+
+Run it ad-hoc, or hook it up to cron / launchd:
+
+```bash
+./darek calendar daily-digest
+```
+
+The email renders as a card per day (rounded corners, calendar-name pills colored by hash, "Today" badge on the first card) with a plaintext fallback. Each event line shows time, calendar, summary, and optional location. Empty days print "Nothing scheduled" rather than being hidden, so a silent miss is debuggable.
+
+Exits non-zero with a clear stderr message if `to` or `from_account` is missing or `from_account` doesn't match a configured `mail.accounts[].nickname`.
 
 ## Todoist
 
@@ -189,9 +254,10 @@ Tools enabled in chat: `mail.search`, `mail.get_body`, `mail.get_attachment`, `m
 
 ## Roadmap
 
-All MVP plans (foundations, calendars, todoist, mail receive, mail send) shipped on `feat/foundations`. Future work:
+All MVP plans (foundations, calendars, todoist, mail receive, mail send) plus calendar write tools and the daily-digest email have shipped. Future work:
 
-- CalDAV / Outlook calendar sources behind the existing `CalendarSource` interface
+- CalDAV / Outlook calendar sources behind the existing `CalendarSource` / `WritableCalendarSource` interfaces
+- Series-level recurring edits and recurrence rules (`RRULE`) on calendar create/update
 - Mail HTML body rendering and a "deep search" tool that fetches bodies for top-K candidates
-- Proactive scheduled tasks (morning digest, etc.) once a service mode lands
+- LLM-augmented digest variant that summarizes the day rather than listing it
 - ActualBudget integration (deferred from MVP)
