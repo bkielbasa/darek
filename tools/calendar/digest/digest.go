@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"html/template"
-	"mime"
 	"mime/multipart"
 	"net/textproto"
 	"sort"
@@ -240,7 +239,7 @@ func BuildEmail(in EmailInput) ([]byte, error) {
 
 	fmt.Fprintf(&buf, "From: %s\r\n", in.From)
 	fmt.Fprintf(&buf, "To: %s\r\n", in.To)
-	fmt.Fprintf(&buf, "Subject: %s\r\n", encodeSubject(in.Subject))
+	fmt.Fprintf(&buf, "Subject: %s\r\n", in.Subject)
 	fmt.Fprintf(&buf, "Date: %s\r\n", in.Date.Format(time.RFC1123Z))
 	fmt.Fprintf(&buf, "Message-ID: <%s>\r\n", mid)
 	fmt.Fprintf(&buf, "MIME-Version: 1.0\r\n")
@@ -275,24 +274,6 @@ func BuildEmail(in EmailInput) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func encodeSubject(s string) string {
-	if isASCII(s) {
-		return s
-	}
-	// Return raw UTF-8; modern mail clients handle it and it keeps the
-	// subject readable in the raw bytes (important for tests and debugging).
-	_ = mime.QEncoding // keep import used via other callers if any
-	return s
-}
-
-func isASCII(s string) bool {
-	for i := 0; i < len(s); i++ {
-		if s[i] > 0x7f {
-			return false
-		}
-	}
-	return true
-}
 
 func generateMessageID(host string) (string, error) {
 	var raw [12]byte
