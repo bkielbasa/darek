@@ -127,3 +127,102 @@ func TestCreateEventTool_ValidationErrors(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateEventTool_PartialPatch(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	args := json.RawMessage(`{"calendar":"work","uid":"abc","summary":"renamed"}`)
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(), args)
+	require.NoError(t, err)
+	require.Len(t, w.updates, 1)
+	require.Equal(t, "abc", w.updates[0].UID)
+	require.NotNil(t, w.updates[0].Patch.Summary)
+	require.Equal(t, "renamed", *w.updates[0].Patch.Summary)
+	require.Nil(t, w.updates[0].Patch.Description)
+	require.Nil(t, w.updates[0].Patch.Attendees)
+	require.Nil(t, w.updates[0].Patch.Start)
+}
+
+func TestUpdateEventTool_AttendeesPresenceClearVsAbsent(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	// Absent — no change
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(),
+		json.RawMessage(`{"calendar":"work","uid":"abc","summary":"x"}`))
+	require.NoError(t, err)
+	require.Nil(t, w.updates[0].Patch.Attendees)
+
+	// Present empty — clear all
+	_, err = UpdateEventTool{Sources: s}.Execute(context.Background(),
+		json.RawMessage(`{"calendar":"work","uid":"abc","attendees":[]}`))
+	require.NoError(t, err)
+	require.NotNil(t, w.updates[1].Patch.Attendees)
+	require.Empty(t, *w.updates[1].Patch.Attendees)
+
+	// Present with values — replace
+	_, err = UpdateEventTool{Sources: s}.Execute(context.Background(),
+		json.RawMessage(`{"calendar":"work","uid":"abc","attendees":["a@example.com"]}`))
+	require.NoError(t, err)
+	require.NotNil(t, w.updates[2].Patch.Attendees)
+	require.Equal(t, []string{"a@example.com"}, *w.updates[2].Patch.Attendees)
+}
+
+func TestUpdateEventTool_NoFields(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(),
+		json.RawMessage(`{"calendar":"work","uid":"abc"}`))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no fields to update")
+	require.Empty(t, w.updates)
+}
+
+func TestUpdateEventTool_StartEndBothPresentValidates(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	bad := json.RawMessage(`{"calendar":"work","uid":"abc","start":"2026-05-02T15:00:00Z","end":"2026-05-02T14:00:00Z"}`)
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(), bad)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "end must not be before start")
+}
+
+func TestUpdateEventTool_StartOnlyPatchSkipsCompare(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	args := json.RawMessage(`{"calendar":"work","uid":"abc","start":"2026-05-02T15:00:00Z"}`)
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(), args)
+	require.NoError(t, err)
+	require.Len(t, w.updates, 1)
+	require.NotNil(t, w.updates[0].Patch.Start)
+	require.Nil(t, w.updates[0].Patch.End)
+}
+
+func TestUpdateEventTool_ReadOnlyCalendar(t *testing.T) {
+	s := NewSources()
+	require.NoError(t, s.Add(fakeSrc{name: "feed"}))
+	args := json.RawMessage(`{"calendar":"feed","uid":"abc","summary":"x"}`)
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(), args)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "read-only")
+}
+
+func TestUpdateEventTool_SendInvitesRoundTrips(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(),
+		json.RawMessage(`{"calendar":"work","uid":"abc","summary":"x","send_invites":true}`))
+	require.NoError(t, err)
+	require.True(t, w.updates[0].Patch.SendInvites)
+}

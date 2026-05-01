@@ -182,6 +182,155 @@ func (t CreateEventTool) Execute(ctx context.Context, args json.RawMessage) (str
 	return formatCreatedOrUpdated(ev), nil
 }
 
+type UpdateEventTool struct {
+	Sources *Sources
+}
+
+func (UpdateEventTool) Name() string { return "calendar.update_event" }
+func (UpdateEventTool) Description() string {
+	return "Update a calendar event by UID. PATCH semantics: only fields present in the call are changed."
+}
+func (UpdateEventTool) JSONSchema() json.RawMessage {
+	return json.RawMessage(`{
+		"type":"object",
+		"properties":{
+			"calendar":{"type":"string"},
+			"uid":{"type":"string","description":"from list_events"},
+			"summary":{"type":"string"},
+			"start":{"type":"string"},
+			"end":{"type":"string"},
+			"all_day":{"type":"boolean"},
+			"description":{"type":"string"},
+			"location":{"type":"string"},
+			"attendees":{"type":"array","items":{"type":"string"},"description":"replaces the full attendee list"},
+			"send_invites":{"type":"boolean","default":false}
+		},
+		"required":["calendar","uid"]
+	}`)
+}
+
+func (t UpdateEventTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	var raw map[string]json.RawMessage
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &raw); err != nil {
+			return "", fmt.Errorf("parse args: %w", err)
+		}
+	}
+	calendar := requireString(raw, "calendar")
+	uid := requireString(raw, "uid")
+	if calendar == "" {
+		return "", fmt.Errorf("calendar: required")
+	}
+	if uid == "" {
+		return "", fmt.Errorf("uid: required")
+	}
+
+	allDay := false
+	if v, ok := raw["all_day"]; ok {
+		if err := json.Unmarshal(v, &allDay); err != nil {
+			return "", fmt.Errorf("all_day: %w", err)
+		}
+	}
+
+	patch := EventPatch{}
+	patchFields := 0
+	if v, ok := raw["summary"]; ok {
+		var sv string
+		if err := json.Unmarshal(v, &sv); err != nil {
+			return "", fmt.Errorf("summary: %w", err)
+		}
+		patch.Summary = &sv
+		patchFields++
+	}
+	if v, ok := raw["description"]; ok {
+		var sv string
+		if err := json.Unmarshal(v, &sv); err != nil {
+			return "", fmt.Errorf("description: %w", err)
+		}
+		patch.Description = &sv
+		patchFields++
+	}
+	if v, ok := raw["location"]; ok {
+		var sv string
+		if err := json.Unmarshal(v, &sv); err != nil {
+			return "", fmt.Errorf("location: %w", err)
+		}
+		patch.Location = &sv
+		patchFields++
+	}
+	if v, ok := raw["start"]; ok {
+		var sv string
+		if err := json.Unmarshal(v, &sv); err != nil {
+			return "", fmt.Errorf("start: %w", err)
+		}
+		ts, err := parseEventTime(sv, allDay, "start")
+		if err != nil {
+			return "", err
+		}
+		patch.Start = &ts
+		patchFields++
+	}
+	if v, ok := raw["end"]; ok {
+		var sv string
+		if err := json.Unmarshal(v, &sv); err != nil {
+			return "", fmt.Errorf("end: %w", err)
+		}
+		ts, err := parseEventTime(sv, allDay, "end")
+		if err != nil {
+			return "", err
+		}
+		patch.End = &ts
+		patchFields++
+	}
+	if _, ok := raw["all_day"]; ok {
+		patch.AllDay = &allDay
+		patchFields++
+	}
+	if v, ok := raw["attendees"]; ok {
+		var atts []string
+		if err := json.Unmarshal(v, &atts); err != nil {
+			return "", fmt.Errorf("attendees: %w", err)
+		}
+		patch.Attendees = &atts
+		patchFields++
+	}
+	if v, ok := raw["send_invites"]; ok {
+		var b bool
+		if err := json.Unmarshal(v, &b); err != nil {
+			return "", fmt.Errorf("send_invites: %w", err)
+		}
+		patch.SendInvites = b
+		// notification flag, not a "patch field" — don't increment patchFields
+	}
+
+	if patchFields == 0 {
+		return "", fmt.Errorf("no fields to update")
+	}
+	if patch.Start != nil && patch.End != nil && patch.End.Before(*patch.Start) {
+		return "", fmt.Errorf("end must not be before start")
+	}
+
+	ev, err := t.Sources.Update(ctx, calendar, uid, patch)
+	if err != nil {
+		return "", err
+	}
+	return formatCreatedOrUpdated(ev), nil
+}
+
+// requireString decodes raw[key] into a string, returning "" if absent or on decode error.
+// Callers handle required-ness (so distinct error messages can be returned).
+func requireString(raw map[string]json.RawMessage, key string) string {
+	v, ok := raw[key]
+	if !ok {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(v, &s); err != nil {
+		return ""
+	}
+	return s
+}
+
 // formatCreatedOrUpdated renders an event in the same shape ListEventsTool uses,
 // followed by a "uid: ..." line so the agent can address it later.
 func formatCreatedOrUpdated(ev Event) string {
