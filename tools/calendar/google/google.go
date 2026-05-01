@@ -15,7 +15,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-const Scope = calsvc.CalendarReadonlyScope
+const Scope = calsvc.CalendarEventsScope
 
 // Config returns an oauth2.Config built from a Google "OAuth client" client_id+secret.
 // We default to the OOB ("urn:ietf:wg:oauth:2.0:oob") flow for desktop CLI use.
