@@ -14,6 +14,14 @@ type Config struct {
 	Calendars []CalendarSrc `yaml:"calendars"`
 	Mail      Mail          `yaml:"mail"`
 	Server    Server        `yaml:"server"`
+
+	CalendarDigest CalendarDigest `yaml:"calendar_digest"`
+}
+
+type CalendarDigest struct {
+	To          string `yaml:"to"`
+	FromAccount string `yaml:"from_account"`
+	Subject     string `yaml:"subject"` // optional; default "Calendar — <YYYY-MM-DD>"
 }
 
 type OpenAI struct {
