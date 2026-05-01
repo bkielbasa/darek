@@ -126,6 +126,8 @@ func (f *fakeWritableSrc) DeleteEvent(_ context.Context, uid string, sendInvites
 	return nil
 }
 
+var _ WritableCalendarSource = (*fakeWritableSrc)(nil)
+
 func TestSources_Create_RoutesToWritableSource(t *testing.T) {
 	s := NewSources()
 	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
@@ -175,6 +177,7 @@ func TestSources_Update_ReadOnlyCalendar(t *testing.T) {
 	require.NoError(t, s.Add(fakeSrc{name: "feed"}))
 	_, err := s.Update(context.Background(), "feed", "abc", EventPatch{})
 	require.ErrorIs(t, err, ErrReadOnly)
+	require.Contains(t, err.Error(), `"feed"`)
 }
 
 func TestSources_Delete_RoutesToWritableSource(t *testing.T) {
@@ -193,4 +196,5 @@ func TestSources_Delete_ReadOnlyCalendar(t *testing.T) {
 	require.NoError(t, s.Add(fakeSrc{name: "feed"}))
 	err := s.Delete(context.Background(), "feed", "abc", false)
 	require.ErrorIs(t, err, ErrReadOnly)
+	require.Contains(t, err.Error(), `"feed"`)
 }
