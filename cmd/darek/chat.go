@@ -130,6 +130,15 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 			if err := reg.Register(calendar.ListEventsTool{Sources: srcs}); err != nil {
 				return err
 			}
+			if err := reg.Register(calendar.CreateEventTool{Sources: srcs}); err != nil {
+				return err
+			}
+			if err := reg.Register(calendar.UpdateEventTool{Sources: srcs}); err != nil {
+				return err
+			}
+			if err := reg.Register(calendar.DeleteEventTool{Sources: srcs}); err != nil {
+				return err
+			}
 		}
 	}
 

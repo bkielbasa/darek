@@ -15,7 +15,7 @@ import (
 	"google.golang.org/api/option"
 )
 
-const Scope = calsvc.CalendarReadonlyScope
+const Scope = calsvc.CalendarEventsScope
 
 // Config returns an oauth2.Config built from a Google "OAuth client" client_id+secret.
 // We default to the OOB ("urn:ietf:wg:oauth:2.0:oob") flow for desktop CLI use.
@@ -123,3 +123,156 @@ func parseDT(t *calsvc.EventDateTime) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+// buildAPIEvent converts a NewEvent into the Google Calendar API shape.
+func buildAPIEvent(in calendar.NewEvent) *calsvc.Event {
+	out := &calsvc.Event{
+		Summary:     in.Summary,
+		Description: in.Description,
+		Location:    in.Location,
+		Start:       eventDateTime(in.Start, in.AllDay),
+		End:         eventDateTime(in.End, in.AllDay),
+	}
+	if len(in.Attendees) > 0 {
+		out.Attendees = make([]*calsvc.EventAttendee, 0, len(in.Attendees))
+		for _, e := range in.Attendees {
+			out.Attendees = append(out.Attendees, &calsvc.EventAttendee{Email: e})
+		}
+	}
+	return out
+}
+
+// buildAPIPatch converts an EventPatch into a partial Google Calendar API event,
+// using ForceSendFields so that empty values (e.g. cleared description, empty
+// attendee list) are actually sent rather than dropped by omitempty.
+func buildAPIPatch(p calendar.EventPatch) *calsvc.Event {
+	out := &calsvc.Event{}
+	allDay := false
+	if p.AllDay != nil {
+		allDay = *p.AllDay
+	}
+	if p.Summary != nil {
+		out.Summary = *p.Summary
+		out.ForceSendFields = append(out.ForceSendFields, "Summary")
+	}
+	if p.Description != nil {
+		out.Description = *p.Description
+		out.ForceSendFields = append(out.ForceSendFields, "Description")
+	}
+	if p.Location != nil {
+		out.Location = *p.Location
+		out.ForceSendFields = append(out.ForceSendFields, "Location")
+	}
+	if p.Start != nil {
+		out.Start = eventDateTime(*p.Start, allDay)
+	}
+	if p.End != nil {
+		out.End = eventDateTime(*p.End, allDay)
+	}
+	if p.Attendees != nil {
+		out.Attendees = make([]*calsvc.EventAttendee, 0, len(*p.Attendees))
+		for _, e := range *p.Attendees {
+			out.Attendees = append(out.Attendees, &calsvc.EventAttendee{Email: e})
+		}
+		out.ForceSendFields = append(out.ForceSendFields, "Attendees")
+	}
+	return out
+}
+
+// eventDateTime renders a time as the right Google API date-or-datetime shape.
+func eventDateTime(t time.Time, allDay bool) *calsvc.EventDateTime {
+	if allDay {
+		return &calsvc.EventDateTime{Date: t.Format("2006-01-02")}
+	}
+	return &calsvc.EventDateTime{DateTime: t.Format(time.RFC3339)}
+}
+
+// sendUpdates maps the bool flag to Google's enum for the sendUpdates query param.
+func sendUpdates(send bool) string {
+	if send {
+		return "all"
+	}
+	return "none"
+}
+
+// clientService loads the OAuth token and builds a traced calendar service.
+func (s *Source) clientService(ctx context.Context) (*calsvc.Service, error) {
+	tok, err := s.store.Load(s.nickname)
+	if err != nil {
+		return nil, fmt.Errorf("load token: %w", err)
+	}
+	httpClient := s.cfg.Client(ctx, tok)
+	httpClient.Transport = otelhttp.NewTransport(httpClient.Transport)
+	svc, err := calsvc.NewService(ctx, option.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, fmt.Errorf("calendar svc: %w", err)
+	}
+	return svc, nil
+}
+
+func (s *Source) CreateEvent(ctx context.Context, in calendar.NewEvent) (calendar.Event, error) {
+	svc, err := s.clientService(ctx)
+	if err != nil {
+		return calendar.Event{}, err
+	}
+	apiEvent := buildAPIEvent(in)
+	call := svc.Events.Insert(s.calID, apiEvent).
+		SendUpdates(sendUpdates(in.SendInvites)).
+		Context(ctx)
+	var res *calsvc.Event
+	if err := obs.Dep(ctx, "google_calendar", "create_event", func(ctx context.Context) error {
+		var err error
+		res, err = call.Do()
+		return err
+	}); err != nil {
+		return calendar.Event{}, fmt.Errorf("events.insert: %w", err)
+	}
+	ev, ok := convert(s.nickname, res)
+	if !ok {
+		return calendar.Event{}, fmt.Errorf("events.insert: unparseable response")
+	}
+	return ev, nil
+}
+
+func (s *Source) UpdateEvent(ctx context.Context, uid string, p calendar.EventPatch) (calendar.Event, error) {
+	svc, err := s.clientService(ctx)
+	if err != nil {
+		return calendar.Event{}, err
+	}
+	apiPatch := buildAPIPatch(p)
+	call := svc.Events.Patch(s.calID, uid, apiPatch).
+		SendUpdates(sendUpdates(p.SendInvites)).
+		Context(ctx)
+	var res *calsvc.Event
+	if err := obs.Dep(ctx, "google_calendar", "update_event", func(ctx context.Context) error {
+		var err error
+		res, err = call.Do()
+		return err
+	}); err != nil {
+		return calendar.Event{}, fmt.Errorf("events.patch: %w", err)
+	}
+	ev, ok := convert(s.nickname, res)
+	if !ok {
+		return calendar.Event{}, fmt.Errorf("events.patch: unparseable response")
+	}
+	return ev, nil
+}
+
+func (s *Source) DeleteEvent(ctx context.Context, uid string, sendInvites bool) error {
+	svc, err := s.clientService(ctx)
+	if err != nil {
+		return err
+	}
+	call := svc.Events.Delete(s.calID, uid).
+		SendUpdates(sendUpdates(sendInvites)).
+		Context(ctx)
+	if err := obs.Dep(ctx, "google_calendar", "delete_event", func(ctx context.Context) error {
+		return call.Do()
+	}); err != nil {
+		return fmt.Errorf("events.delete: %w", err)
+	}
+	return nil
+}
+
+// Compile-time check that *Source implements WritableCalendarSource.
+var _ calendar.WritableCalendarSource = (*Source)(nil)

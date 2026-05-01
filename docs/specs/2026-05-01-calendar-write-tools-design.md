@@ -221,7 +221,7 @@ Table-driven unit tests using a fake `WritableCalendarSource` that records calls
 - Happy path for each tool: source called with the expected `NewEvent` / `EventPatch` / `(uid, sendInvites)`.
 - Read-only calendar: tool returns error message containing the nickname and `read-only`.
 - Unknown calendar nickname: existing error format.
-- Validation errors: empty summary, `end ≤ start`, malformed RFC3339, `update_event` with no patch fields, `all_day=true` with datetime input.
+- Validation errors: empty summary, `end < start`, malformed RFC3339, `update_event` with no patch fields, `all_day=true` with datetime input.
 - PATCH presence: `update_event` with `attendees: []` clears, with `attendees` absent leaves alone.
 - `send_invites` flag round-trips into `NewEvent.SendInvites` / `EventPatch.SendInvites` / delete arg.
 

@@ -2,6 +2,7 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -17,6 +18,43 @@ type Event struct {
 	Start       time.Time
 	End         time.Time
 	AllDay      bool
+}
+
+var ErrReadOnly = errors.New("calendar is read-only")
+
+// NewEvent is the input shape for creating a calendar event.
+type NewEvent struct {
+	Summary     string
+	Description string
+	Location    string
+	Start       time.Time
+	End         time.Time
+	AllDay      bool
+	Attendees   []string // emails
+	SendInvites bool
+}
+
+// EventPatch carries PATCH-style updates: only non-nil pointer fields are applied.
+// For Attendees: nil means "no change", a non-nil pointer to a slice (including empty)
+// replaces the full attendee list.
+type EventPatch struct {
+	Summary     *string
+	Description *string
+	Location    *string
+	Start       *time.Time
+	End         *time.Time
+	AllDay      *bool
+	Attendees   *[]string
+	SendInvites bool
+}
+
+// WritableCalendarSource is implemented by sources that support mutations.
+// Read-only sources (e.g. iCal feeds) don't implement it.
+type WritableCalendarSource interface {
+	CalendarSource
+	CreateEvent(ctx context.Context, in NewEvent) (Event, error)
+	UpdateEvent(ctx context.Context, uid string, patch EventPatch) (Event, error)
+	DeleteEvent(ctx context.Context, uid string, sendInvites bool) error
 }
 
 type CalendarSource interface {
@@ -92,6 +130,52 @@ func (s *Sources) ListEvents(ctx context.Context, from, to time.Time, calendar s
 		return nil, fmt.Errorf("all calendar sources failed: %v", errs)
 	}
 	return out, nil
+}
+
+// Create resolves the calendar nickname to a writable source and creates the event.
+// Returns ErrReadOnly (wrapped with the nickname) if the source isn't writable.
+func (s *Sources) Create(ctx context.Context, calendar string, in NewEvent) (Event, error) {
+	w, err := s.writable(calendar)
+	if err != nil {
+		return Event{}, err
+	}
+	return w.CreateEvent(ctx, in)
+}
+
+// Update resolves the calendar nickname to a writable source and applies the patch.
+func (s *Sources) Update(ctx context.Context, calendar, uid string, patch EventPatch) (Event, error) {
+	w, err := s.writable(calendar)
+	if err != nil {
+		return Event{}, err
+	}
+	return w.UpdateEvent(ctx, uid, patch)
+}
+
+// Delete resolves the calendar nickname to a writable source and deletes the event.
+func (s *Sources) Delete(ctx context.Context, calendar, uid string, sendInvites bool) error {
+	w, err := s.writable(calendar)
+	if err != nil {
+		return err
+	}
+	return w.DeleteEvent(ctx, uid, sendInvites)
+}
+
+// writable looks up `calendar` and returns it as a WritableCalendarSource, or
+// an error wrapping ErrReadOnly / unknown-calendar.
+func (s *Sources) writable(calendar string) (WritableCalendarSource, error) {
+	s.mu.RLock()
+	src, ok := s.bynm[calendar]
+	if !ok {
+		names := s.namesUnlocked()
+		s.mu.RUnlock()
+		return nil, fmt.Errorf("unknown calendar %q (have: %v)", calendar, names)
+	}
+	s.mu.RUnlock()
+	w, ok := src.(WritableCalendarSource)
+	if !ok {
+		return nil, fmt.Errorf("calendar %q: %w", calendar, ErrReadOnly)
+	}
+	return w, nil
 }
 
 func (s *Sources) namesUnlocked() []string {
