@@ -226,3 +226,38 @@ func TestUpdateEventTool_SendInvitesRoundTrips(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, w.updates[0].Patch.SendInvites)
 }
+
+func TestUpdateEventTool_SendInvitesAloneIsNotAPatchField(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	args := json.RawMessage(`{"calendar":"work","uid":"abc","send_invites":true}`)
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(), args)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no fields to update")
+	require.Empty(t, w.updates)
+}
+
+func TestUpdateEventTool_MalformedStart(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	args := json.RawMessage(`{"calendar":"work","uid":"abc","start":"not-a-time"}`)
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(), args)
+	require.Error(t, err)
+	require.Empty(t, w.updates)
+}
+
+func TestUpdateEventTool_AllDayWithDatetime(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
+	require.NoError(t, s.Add(w))
+
+	args := json.RawMessage(`{"calendar":"work","uid":"abc","all_day":true,"start":"2026-05-02T15:00:00Z"}`)
+	_, err := UpdateEventTool{Sources: s}.Execute(context.Background(), args)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "all_day requires YYYY-MM-DD")
+	require.Empty(t, w.updates)
+}

@@ -216,8 +216,14 @@ func (t UpdateEventTool) Execute(ctx context.Context, args json.RawMessage) (str
 			return "", fmt.Errorf("parse args: %w", err)
 		}
 	}
-	calendar := requireString(raw, "calendar")
-	uid := requireString(raw, "uid")
+	calendar, err := requireString(raw, "calendar")
+	if err != nil {
+		return "", err
+	}
+	uid, err := requireString(raw, "uid")
+	if err != nil {
+		return "", err
+	}
 	if calendar == "" {
 		return "", fmt.Errorf("calendar: required")
 	}
@@ -317,18 +323,18 @@ func (t UpdateEventTool) Execute(ctx context.Context, args json.RawMessage) (str
 	return formatCreatedOrUpdated(ev), nil
 }
 
-// requireString decodes raw[key] into a string, returning "" if absent or on decode error.
-// Callers handle required-ness (so distinct error messages can be returned).
-func requireString(raw map[string]json.RawMessage, key string) string {
+// requireString decodes raw[key] into a string. Returns "" if absent.
+// Returns an error only if the key is present but not a JSON string.
+func requireString(raw map[string]json.RawMessage, key string) (string, error) {
 	v, ok := raw[key]
 	if !ok {
-		return ""
+		return "", nil
 	}
 	var s string
 	if err := json.Unmarshal(v, &s); err != nil {
-		return ""
+		return "", fmt.Errorf("%s: expected string, got invalid JSON: %w", key, err)
 	}
-	return s
+	return s, nil
 }
 
 // formatCreatedOrUpdated renders an event in the same shape ListEventsTool uses,
