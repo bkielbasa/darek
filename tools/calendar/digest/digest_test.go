@@ -1,6 +1,7 @@
 package digest
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -144,4 +145,47 @@ func TestRenderText_GoldenSample(t *testing.T) {
 		"  10:00–11:00 [work] Quarterly planning\n"
 	got := RenderText(buckets)
 	require.Equal(t, want, got)
+}
+
+func TestRenderHTML_EscapesHostileTitles(t *testing.T) {
+	loc := time.UTC
+	d0 := time.Date(2026, 5, 1, 0, 0, 0, 0, loc)
+	buckets := []DayBucket{
+		{Date: d0, Events: []calendar.Event{
+			{Calendar: "work", Summary: "<script>alert(1)</script>", Start: time.Date(2026, 5, 1, 9, 0, 0, 0, loc), End: time.Date(2026, 5, 1, 10, 0, 0, 0, loc)},
+		}},
+		{Date: d0.AddDate(0, 0, 1), Events: nil},
+		{Date: d0.AddDate(0, 0, 2), Events: nil},
+	}
+	html := RenderHTML(buckets, d0)
+	require.NotContains(t, html, "<script>alert(1)</script>")
+	require.Contains(t, html, "&lt;script&gt;alert(1)&lt;/script&gt;")
+}
+
+func TestRenderHTML_StructuralElements(t *testing.T) {
+	loc := time.UTC
+	d0 := time.Date(2026, 5, 1, 0, 0, 0, 0, loc)
+	buckets := []DayBucket{
+		{Date: d0, Events: []calendar.Event{
+			{Calendar: "work", Summary: "Standup", Start: time.Date(2026, 5, 1, 9, 0, 0, 0, loc), End: time.Date(2026, 5, 1, 10, 0, 0, 0, loc)},
+		}},
+		{Date: d0.AddDate(0, 0, 1), Events: nil},
+		{Date: d0.AddDate(0, 0, 2), Events: nil},
+	}
+	html := RenderHTML(buckets, d0)
+	require.Equal(t, 1, strings.Count(html, "Today"))
+	require.Contains(t, html, "Friday")
+	require.Contains(t, html, "Saturday")
+	require.Contains(t, html, "Sunday")
+	require.Contains(t, html, "Nothing scheduled")
+	require.Contains(t, html, "work")
+}
+
+func TestRenderHTML_NicknameColorIsDeterministic(t *testing.T) {
+	c1 := pillColor("work")
+	c2 := pillColor("work")
+	c3 := pillColor("personal")
+	require.Equal(t, c1, c2)
+	require.NotEqual(t, c1, c3)
+	require.Regexp(t, `^#[0-9a-fA-F]{6}$`, c1)
 }
