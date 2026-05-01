@@ -91,7 +91,7 @@ func parseEventTime(s string, allDay bool, field string) (time.Time, error) {
 	}
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("%s: %w", field, err)
+		return time.Time{}, fmt.Errorf("%s: requires RFC3339 datetime, got %q (use all_day=true for date-only)", field, s)
 	}
 	return t, nil
 }
