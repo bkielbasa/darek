@@ -16,7 +16,7 @@ import (
 // runCalendar dispatches `darek calendar <subcmd> <args...>`.
 func runCalendar(ctx context.Context, cfgPath string, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: darek calendar refresh-token <nickname>")
+		return fmt.Errorf("usage: darek calendar <refresh-token|daily-digest> [args...]")
 	}
 	switch args[0] {
 	case "refresh-token":
@@ -24,8 +24,10 @@ func runCalendar(ctx context.Context, cfgPath string, args []string) error {
 			return fmt.Errorf("usage: darek calendar refresh-token <nickname>")
 		}
 		return runRefreshToken(ctx, cfgPath, args[1])
+	case "daily-digest":
+		return runDailyDigest(ctx, cfgPath)
 	default:
-		return fmt.Errorf("unknown calendar subcommand %q (try: refresh-token)", args[0])
+		return fmt.Errorf("unknown calendar subcommand %q (try: refresh-token, daily-digest)", args[0])
 	}
 }
 
