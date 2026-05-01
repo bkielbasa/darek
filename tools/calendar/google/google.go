@@ -123,3 +123,74 @@ func parseDT(t *calsvc.EventDateTime) (time.Time, bool) {
 	}
 	return time.Time{}, false
 }
+
+// buildAPIEvent converts a NewEvent into the Google Calendar API shape.
+func buildAPIEvent(in calendar.NewEvent) *calsvc.Event {
+	out := &calsvc.Event{
+		Summary:     in.Summary,
+		Description: in.Description,
+		Location:    in.Location,
+		Start:       eventDateTime(in.Start, in.AllDay),
+		End:         eventDateTime(in.End, in.AllDay),
+	}
+	if len(in.Attendees) > 0 {
+		out.Attendees = make([]*calsvc.EventAttendee, 0, len(in.Attendees))
+		for _, e := range in.Attendees {
+			out.Attendees = append(out.Attendees, &calsvc.EventAttendee{Email: e})
+		}
+	}
+	return out
+}
+
+// buildAPIPatch converts an EventPatch into a partial Google Calendar API event,
+// using ForceSendFields so that empty values (e.g. cleared description, empty
+// attendee list) are actually sent rather than dropped by omitempty.
+func buildAPIPatch(p calendar.EventPatch) *calsvc.Event {
+	out := &calsvc.Event{}
+	allDay := false
+	if p.AllDay != nil {
+		allDay = *p.AllDay
+	}
+	if p.Summary != nil {
+		out.Summary = *p.Summary
+		out.ForceSendFields = append(out.ForceSendFields, "Summary")
+	}
+	if p.Description != nil {
+		out.Description = *p.Description
+		out.ForceSendFields = append(out.ForceSendFields, "Description")
+	}
+	if p.Location != nil {
+		out.Location = *p.Location
+		out.ForceSendFields = append(out.ForceSendFields, "Location")
+	}
+	if p.Start != nil {
+		out.Start = eventDateTime(*p.Start, allDay)
+	}
+	if p.End != nil {
+		out.End = eventDateTime(*p.End, allDay)
+	}
+	if p.Attendees != nil {
+		out.Attendees = make([]*calsvc.EventAttendee, 0, len(*p.Attendees))
+		for _, e := range *p.Attendees {
+			out.Attendees = append(out.Attendees, &calsvc.EventAttendee{Email: e})
+		}
+		out.ForceSendFields = append(out.ForceSendFields, "Attendees")
+	}
+	return out
+}
+
+// eventDateTime renders a time as the right Google API date-or-datetime shape.
+func eventDateTime(t time.Time, allDay bool) *calsvc.EventDateTime {
+	if allDay {
+		return &calsvc.EventDateTime{Date: t.Format("2006-01-02")}
+	}
+	return &calsvc.EventDateTime{DateTime: t.Format(time.RFC3339)}
+}
+
+// sendUpdates maps the bool flag to Google's enum for the sendUpdates query param.
+func sendUpdates(send bool) string {
+	if send {
+		return "all"
+	}
+	return "none"
+}
