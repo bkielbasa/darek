@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
@@ -293,13 +294,17 @@ func TestDeleteEventTool_RequiredFields(t *testing.T) {
 	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}}
 	require.NoError(t, s.Add(w))
 
-	for name, body := range map[string]string{
-		"missing calendar": `{"uid":"abc"}`,
-		"missing uid":      `{"calendar":"work"}`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			_, err := DeleteEventTool{Sources: s}.Execute(context.Background(), json.RawMessage(body))
+	cases := []struct {
+		name, body, want string
+	}{
+		{"missing calendar", `{"uid":"abc"}`, "calendar: required"},
+		{"missing uid", `{"calendar":"work"}`, "uid: required"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := DeleteEventTool{Sources: s}.Execute(context.Background(), json.RawMessage(c.body))
 			require.Error(t, err)
+			require.Contains(t, err.Error(), c.want)
 		})
 	}
 	require.Empty(t, w.deletes)
@@ -312,4 +317,15 @@ func TestDeleteEventTool_ReadOnlyCalendar(t *testing.T) {
 		json.RawMessage(`{"calendar":"feed","uid":"abc"}`))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "read-only")
+}
+
+func TestDeleteEventTool_SourceError(t *testing.T) {
+	s := NewSources()
+	w := &fakeWritableSrc{fakeSrc: fakeSrc{name: "work"}, deleteErr: errors.New("network timeout")}
+	require.NoError(t, s.Add(w))
+
+	_, err := DeleteEventTool{Sources: s}.Execute(context.Background(),
+		json.RawMessage(`{"calendar":"work","uid":"abc"}`))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "network timeout")
 }
