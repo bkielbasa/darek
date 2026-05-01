@@ -2,6 +2,7 @@ package calendar
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"sync"
@@ -17,6 +18,43 @@ type Event struct {
 	Start       time.Time
 	End         time.Time
 	AllDay      bool
+}
+
+var ErrReadOnly = errors.New("calendar is read-only")
+
+// NewEvent is the input shape for creating a calendar event.
+type NewEvent struct {
+	Summary     string
+	Description string
+	Location    string
+	Start       time.Time
+	End         time.Time
+	AllDay      bool
+	Attendees   []string // emails
+	SendInvites bool
+}
+
+// EventPatch carries PATCH-style updates: only non-nil pointer fields are applied.
+// For Attendees: nil means "no change", a non-nil pointer to a slice (including empty)
+// replaces the full attendee list.
+type EventPatch struct {
+	Summary     *string
+	Description *string
+	Location    *string
+	Start       *time.Time
+	End         *time.Time
+	AllDay      *bool
+	Attendees   *[]string
+	SendInvites bool
+}
+
+// WritableCalendarSource is implemented by sources that support mutations.
+// Read-only sources (e.g. iCal feeds) don't implement it.
+type WritableCalendarSource interface {
+	CalendarSource
+	CreateEvent(ctx context.Context, in NewEvent) (Event, error)
+	UpdateEvent(ctx context.Context, uid string, patch EventPatch) (Event, error)
+	DeleteEvent(ctx context.Context, uid string, sendInvites bool) error
 }
 
 type CalendarSource interface {
