@@ -2,7 +2,9 @@
 package digest
 
 import (
+	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"darek/tools/calendar"
@@ -62,4 +64,34 @@ func sortBucket(evs []calendar.Event) {
 		}
 		return evs[i].Start.Before(evs[j].Start)
 	})
+}
+
+// RenderText returns the plaintext digest body. Day blocks are separated by
+// a blank line; each event line is indented two spaces.
+func RenderText(buckets []DayBucket) string {
+	var b strings.Builder
+	for i, bk := range buckets {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "%s %s\n", bk.Date.Format("Monday"), bk.Date.Format("2006-01-02"))
+		if len(bk.Events) == 0 {
+			b.WriteString("  Nothing scheduled\n")
+			continue
+		}
+		for _, ev := range bk.Events {
+			b.WriteString("  ")
+			if ev.AllDay {
+				b.WriteString("(all day)")
+			} else {
+				fmt.Fprintf(&b, "%s–%s", ev.Start.Format("15:04"), ev.End.Format("15:04"))
+			}
+			fmt.Fprintf(&b, " [%s] %s", ev.Calendar, ev.Summary)
+			if ev.Location != "" {
+				fmt.Fprintf(&b, " @ %s", ev.Location)
+			}
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
 }

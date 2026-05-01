@@ -114,3 +114,34 @@ func TestGroup_SortAllDayBeforeTimedThenByStart(t *testing.T) {
 	require.Equal(t, "T-early", buckets[0].Events[1].Summary)
 	require.Equal(t, "T-late", buckets[0].Events[2].Summary)
 }
+
+func TestRenderText_GoldenSample(t *testing.T) {
+	loc := time.UTC
+	d0 := time.Date(2026, 5, 1, 0, 0, 0, 0, loc)
+	d1 := d0.AddDate(0, 0, 1)
+	d2 := d0.AddDate(0, 0, 2)
+	buckets := []DayBucket{
+		{Date: d0, Events: []calendar.Event{
+			{Calendar: "personal", Summary: "Vacation", AllDay: true, Start: d0, End: d1},
+			{Calendar: "work", Summary: "Standup", Start: time.Date(2026, 5, 1, 9, 0, 0, 0, loc), End: time.Date(2026, 5, 1, 9, 30, 0, 0, loc)},
+			{Calendar: "personal", Summary: "Lunch with Bart", Location: "La Cantine", Start: time.Date(2026, 5, 1, 12, 30, 0, 0, loc), End: time.Date(2026, 5, 1, 13, 30, 0, 0, loc)},
+		}},
+		{Date: d1, Events: nil},
+		{Date: d2, Events: []calendar.Event{
+			{Calendar: "work", Summary: "Quarterly planning", Start: time.Date(2026, 5, 3, 10, 0, 0, 0, loc), End: time.Date(2026, 5, 3, 11, 0, 0, 0, loc)},
+		}},
+	}
+	want := "" +
+		"Friday 2026-05-01\n" +
+		"  (all day) [personal] Vacation\n" +
+		"  09:00–09:30 [work] Standup\n" +
+		"  12:30–13:30 [personal] Lunch with Bart @ La Cantine\n" +
+		"\n" +
+		"Saturday 2026-05-02\n" +
+		"  Nothing scheduled\n" +
+		"\n" +
+		"Sunday 2026-05-03\n" +
+		"  10:00–11:00 [work] Quarterly planning\n"
+	got := RenderText(buckets)
+	require.Equal(t, want, got)
+}
