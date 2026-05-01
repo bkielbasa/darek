@@ -54,6 +54,14 @@ func TestBuildAPIPatch_OnlyPresentFields(t *testing.T) {
 	require.Contains(t, got.ForceSendFields, "Summary")
 }
 
+func TestBuildAPIPatch_StringFieldClearedToEmpty(t *testing.T) {
+	empty := ""
+	patch := calendar.EventPatch{Description: &empty}
+	got := buildAPIPatch(patch)
+	require.Equal(t, "", got.Description)
+	require.Contains(t, got.ForceSendFields, "Description")
+}
+
 func TestBuildAPIPatch_AttendeesCleared(t *testing.T) {
 	empty := []string{}
 	patch := calendar.EventPatch{Attendees: &empty}
