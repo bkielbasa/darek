@@ -194,3 +194,85 @@ func sendUpdates(send bool) string {
 	}
 	return "none"
 }
+
+// clientService loads the OAuth token and builds a traced calendar service.
+func (s *Source) clientService(ctx context.Context) (*calsvc.Service, error) {
+	tok, err := s.store.Load(s.nickname)
+	if err != nil {
+		return nil, fmt.Errorf("load token: %w", err)
+	}
+	httpClient := s.cfg.Client(ctx, tok)
+	httpClient.Transport = otelhttp.NewTransport(httpClient.Transport)
+	svc, err := calsvc.NewService(ctx, option.WithHTTPClient(httpClient))
+	if err != nil {
+		return nil, fmt.Errorf("calendar svc: %w", err)
+	}
+	return svc, nil
+}
+
+func (s *Source) CreateEvent(ctx context.Context, in calendar.NewEvent) (calendar.Event, error) {
+	svc, err := s.clientService(ctx)
+	if err != nil {
+		return calendar.Event{}, err
+	}
+	apiEvent := buildAPIEvent(in)
+	call := svc.Events.Insert(s.calID, apiEvent).
+		SendUpdates(sendUpdates(in.SendInvites)).
+		Context(ctx)
+	var res *calsvc.Event
+	if err := obs.Dep(ctx, "google_calendar", "create_event", func(ctx context.Context) error {
+		var err error
+		res, err = call.Do()
+		return err
+	}); err != nil {
+		return calendar.Event{}, fmt.Errorf("events.insert: %w", err)
+	}
+	ev, ok := convert(s.nickname, res)
+	if !ok {
+		return calendar.Event{}, fmt.Errorf("events.insert: unparseable response")
+	}
+	return ev, nil
+}
+
+func (s *Source) UpdateEvent(ctx context.Context, uid string, p calendar.EventPatch) (calendar.Event, error) {
+	svc, err := s.clientService(ctx)
+	if err != nil {
+		return calendar.Event{}, err
+	}
+	apiPatch := buildAPIPatch(p)
+	call := svc.Events.Patch(s.calID, uid, apiPatch).
+		SendUpdates(sendUpdates(p.SendInvites)).
+		Context(ctx)
+	var res *calsvc.Event
+	if err := obs.Dep(ctx, "google_calendar", "update_event", func(ctx context.Context) error {
+		var err error
+		res, err = call.Do()
+		return err
+	}); err != nil {
+		return calendar.Event{}, fmt.Errorf("events.patch: %w", err)
+	}
+	ev, ok := convert(s.nickname, res)
+	if !ok {
+		return calendar.Event{}, fmt.Errorf("events.patch: unparseable response")
+	}
+	return ev, nil
+}
+
+func (s *Source) DeleteEvent(ctx context.Context, uid string, sendInvites bool) error {
+	svc, err := s.clientService(ctx)
+	if err != nil {
+		return err
+	}
+	call := svc.Events.Delete(s.calID, uid).
+		SendUpdates(sendUpdates(sendInvites)).
+		Context(ctx)
+	if err := obs.Dep(ctx, "google_calendar", "delete_event", func(ctx context.Context) error {
+		return call.Do()
+	}); err != nil {
+		return fmt.Errorf("events.delete: %w", err)
+	}
+	return nil
+}
+
+// Compile-time check that *Source implements WritableCalendarSource.
+var _ calendar.WritableCalendarSource = (*Source)(nil)
