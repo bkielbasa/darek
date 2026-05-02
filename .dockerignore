@@ -1,0 +1,16 @@
+.git
+.github
+.idea
+.vscode
+darek
+*.test
+*.out
+*.log
+docs/
+otel/grafana/
+otel/prom/
+docker-compose*.yml
+Dockerfile
+.dockerignore
+README.md
+CLAUDE.md
