@@ -29,6 +29,7 @@ type Server struct {
 	mux     *http.ServeMux
 	sync    SyncFn
 	analyze Analyzer
+	auth    AuthConfig
 }
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
@@ -46,7 +47,7 @@ func New(store *links.Store, sync SyncFn, analyzer Analyzer) (*Server, error) {
 // Handler returns an http.Handler suitable for passing to http.Server.
 // Wraps the mux with otelhttp for span coverage.
 func (s *Server) Handler() http.Handler {
-	return otelhttp.NewHandler(s.mux, "darek.serve")
+	return otelhttp.NewHandler(s.requireAuth(s.mux), "darek.serve")
 }
 
 func (s *Server) routes() {
