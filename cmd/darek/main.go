@@ -48,9 +48,11 @@ func run() error {
 		return runTodoist(ctx, cfgPath, args)
 	case "serve":
 		return runServe(ctx, cfgPath)
+	case "auth":
+		return runAuth(ctx, args, os.Stdout)
 	case "", "chat":
 		return runChat(ctx, cfgPath, strings.Join(args, " "))
 	default:
-		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar, mail, freshrss, todoist, serve)", cmd)
+		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar, mail, freshrss, todoist, serve, auth)", cmd)
 	}
 }
