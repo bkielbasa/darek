@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"time"
@@ -121,7 +122,28 @@ func runServe(ctx context.Context, cfgPath string) error {
 		}
 	}
 
-	srv, err := serve.New(store, sync, analyzer, serve.AuthConfig{})
+	authUsername, err := config.ResolveSecret("env:" + cfg.Auth.UsernameEnv)
+	if err != nil {
+		return fmt.Errorf("auth username: %w (set Auth.UsernameEnv in config and the env var in secrets)", err)
+	}
+	authHash, err := config.ResolveSecret("env:" + cfg.Auth.PasswordHashEnv)
+	if err != nil {
+		return fmt.Errorf("auth password hash: %w (run `darek auth hash <password>` and set %s)", err, cfg.Auth.PasswordHashEnv)
+	}
+	sessionKeyHex, err := config.ResolveSecret("env:" + cfg.Auth.SessionKeyEnv)
+	if err != nil {
+		return fmt.Errorf("auth session key: %w (set %s to `openssl rand -hex 32`)", err, cfg.Auth.SessionKeyEnv)
+	}
+	sessionKey, err := hex.DecodeString(sessionKeyHex)
+	if err != nil {
+		return fmt.Errorf("auth session key: not valid hex: %w", err)
+	}
+	authCfg, err := serve.NewAuthConfig(authUsername, []byte(authHash), sessionKey, cfg.Auth.SessionTTL)
+	if err != nil {
+		return err
+	}
+
+	srv, err := serve.New(store, sync, analyzer, authCfg)
 	if err != nil {
 		return err
 	}
