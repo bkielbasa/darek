@@ -29,16 +29,17 @@ type Server struct {
 	mux     *http.ServeMux
 	sync    SyncFn
 	analyze Analyzer
+	auth    AuthConfig
 }
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
 // If analyzer is nil, /links/{id}/analyze returns 501 and the UI hides the button.
-func New(store *links.Store, sync SyncFn, analyzer Analyzer) (*Server, error) {
+func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig) (*Server, error) {
 	t, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync, analyze: analyzer}
+	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync, analyze: analyzer, auth: auth}
 	s.routes()
 	return s, nil
 }
@@ -46,7 +47,7 @@ func New(store *links.Store, sync SyncFn, analyzer Analyzer) (*Server, error) {
 // Handler returns an http.Handler suitable for passing to http.Server.
 // Wraps the mux with otelhttp for span coverage.
 func (s *Server) Handler() http.Handler {
-	return otelhttp.NewHandler(s.mux, "darek.serve")
+	return otelhttp.NewHandler(s.requireAuth(s.mux), "darek.serve")
 }
 
 func (s *Server) routes() {
@@ -57,6 +58,8 @@ func (s *Server) routes() {
 
 	staticFS, _ := fs.Sub(StaticFS, "static")
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
+
+	s.routesAuth()
 
 	s.mux.Handle("GET /{$}", s.handleList(true))  // queue
 	s.mux.Handle("GET /all", s.handleList(false)) // archive

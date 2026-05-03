@@ -14,6 +14,7 @@ type Config struct {
 	Calendars []CalendarSrc `yaml:"calendars"`
 	Mail      Mail          `yaml:"mail"`
 	Server    Server        `yaml:"server"`
+	Auth      Auth          `yaml:"auth"`
 
 	CalendarDigest CalendarDigest `yaml:"calendar_digest"`
 }
@@ -69,6 +70,13 @@ type FreshRSS struct {
 
 type Server struct {
 	Bind string `yaml:"bind"` // e.g. 127.0.0.1:7777
+}
+
+type Auth struct {
+	UsernameEnv     string        `yaml:"username_env"`
+	PasswordHashEnv string        `yaml:"password_hash_env"`
+	SessionKeyEnv   string        `yaml:"session_key_env"`
+	SessionTTL      time.Duration `yaml:"session_ttl"` // optional; default 720h
 }
 
 type CalendarSrc struct {
