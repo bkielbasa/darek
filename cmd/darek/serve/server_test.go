@@ -1,14 +1,30 @@
 package serve_test
 
 import (
+	"bytes"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"darek/cmd/darek/serve"
 )
 
+func dummyAuth(t *testing.T) serve.AuthConfig {
+	t.Helper()
+	a, err := serve.NewAuthConfig(
+		"test",
+		[]byte("placeholder-hash"),
+		bytes.Repeat([]byte{0}, 32),
+		time.Hour,
+	)
+	if err != nil {
+		t.Fatalf("dummy auth: %v", err)
+	}
+	return a
+}
+
 func TestServer_Healthz(t *testing.T) {
-	s, err := serve.New(nil, nil, nil) // healthz doesn't need a store
+	s, err := serve.New(nil, nil, nil, dummyAuth(t))
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -24,7 +40,7 @@ func TestServer_Healthz(t *testing.T) {
 }
 
 func TestServer_StaticCSS(t *testing.T) {
-	s, err := serve.New(nil, nil, nil)
+	s, err := serve.New(nil, nil, nil, dummyAuth(t))
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
