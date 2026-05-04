@@ -1,7 +1,11 @@
 package youtube
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -139,4 +143,93 @@ func TestFormatDuration(t *testing.T) {
 			require.Equal(t, tc.want, formatDuration(tc.in))
 		})
 	}
+}
+
+// newFakeYouTube serves /watch from a fixture HTML, rewriting embedded
+// caption baseUrl hosts to point at the test server, and serves /timedtext
+// from the JSON3 fixture. Returns the server (caller must Close).
+//
+// The fixtures hard-code https://example.invalid as the caption host. This
+// helper substitutes the running httptest server's URL at request time, so
+// the watch-page response points the client back at the same fake server
+// for the transcript fetch.
+func newFakeYouTube(t *testing.T, watchFixture string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(nil)
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/watch":
+			b, err := os.ReadFile("testdata/" + watchFixture)
+			require.NoError(t, err)
+			body := strings.ReplaceAll(string(b), "https://example.invalid", srv.URL)
+			_, _ = w.Write([]byte(body))
+		case "/timedtext":
+			require.Equal(t, "json3", r.URL.Query().Get("fmt"))
+			b, err := os.ReadFile("testdata/transcript.json3")
+			require.NoError(t, err)
+			_, _ = w.Write(b)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	srv.Start()
+	return srv
+}
+
+func TestFetch_HappyPath(t *testing.T) {
+	srv := newFakeYouTube(t, "watch_with_captions.html")
+	defer srv.Close()
+
+	c := NewClient(srv.Client())
+	c.base = srv.URL
+
+	res, err := c.Fetch(context.Background(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "")
+	require.NoError(t, err)
+	require.Equal(t, "Test Video", res.Title)
+	require.Equal(t, "Test Channel", res.Channel)
+	require.Equal(t, 433*time.Second, res.Duration)
+	require.Equal(t, "Hello, world. This is a test. Multiple spaces.", res.Text)
+}
+
+func TestFetch_NoCaptions(t *testing.T) {
+	srv := newFakeYouTube(t, "watch_no_captions.html")
+	defer srv.Close()
+
+	c := NewClient(srv.Client())
+	c.base = srv.URL
+
+	_, err := c.Fetch(context.Background(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "no captions available")
+}
+
+func TestFetch_VideoNotAccessible(t *testing.T) {
+	srv := newFakeYouTube(t, "watch_private.html")
+	defer srv.Close()
+
+	c := NewClient(srv.Client())
+	c.base = srv.URL
+
+	_, err := c.Fetch(context.Background(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not accessible")
+}
+
+func TestFetch_LanguageNotAvailable(t *testing.T) {
+	srv := newFakeYouTube(t, "watch_with_captions.html")
+	defer srv.Close()
+
+	c := NewClient(srv.Client())
+	c.base = srv.URL
+
+	_, err := c.Fetch(context.Background(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "fr")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), `language "fr" not available`)
+}
+
+func TestFetch_BadURL(t *testing.T) {
+	c := NewClient(nil)
+	_, err := c.Fetch(context.Background(), "https://example.com/foo", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid YouTube URL")
 }

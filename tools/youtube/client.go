@@ -1,11 +1,14 @@
 package youtube
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -195,4 +198,74 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%dm %02ds", total/60, total%60)
 	}
 	return fmt.Sprintf("%dh %02dm %02ds", total/3600, (total%3600)/60, total%60)
+}
+
+const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+// Fetch returns the transcript Result for a video. lang is optional ("" = default fallback).
+func (c *Client) Fetch(ctx context.Context, rawURL, lang string) (Result, error) {
+	id, err := ExtractVideoID(rawURL)
+	if err != nil {
+		return Result{}, err
+	}
+	html, err := c.getString(ctx, c.base+"/watch?v="+id)
+	if err != nil {
+		return Result{}, fmt.Errorf("fetch watch page: %w", err)
+	}
+	pr, err := parsePlayerResponse(html)
+	if err != nil {
+		return Result{}, err
+	}
+	track, err := pickTrack(pr.Captions.Tracklist.CaptionTracks, lang)
+	if err != nil {
+		return Result{}, err
+	}
+	transURL := track.BaseURL
+	if strings.Contains(transURL, "?") {
+		transURL += "&fmt=json3"
+	} else {
+		transURL += "?fmt=json3"
+	}
+	body, err := c.getBytes(ctx, transURL)
+	if err != nil {
+		return Result{}, fmt.Errorf("fetch transcript: %w", err)
+	}
+	text, err := parseJSON3(body)
+	if err != nil {
+		return Result{}, err
+	}
+
+	secs, _ := strconv.Atoi(pr.VideoDetails.LengthSeconds)
+	return Result{
+		Title:    pr.VideoDetails.Title,
+		Channel:  pr.VideoDetails.Author,
+		Duration: time.Duration(secs) * time.Second,
+		Text:     text,
+	}, nil
+}
+
+func (c *Client) getString(ctx context.Context, url string) (string, error) {
+	b, err := c.getBytes(ctx, url)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func (c *Client) getBytes(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return io.ReadAll(resp.Body)
 }
