@@ -74,7 +74,9 @@ func runFreshRSSSync(ctx context.Context, cfgPath string) error {
 	}
 
 	store := links.NewStore(pool)
-	res, err := freshrssimport.Sync(ctx, fr, store, nil)
+	va := buildVideoAnalyzer(cfg)
+	onVideo := buildVideoAutoAnalyze(va, store)
+	res, err := freshrssimport.Sync(ctx, fr, store, onVideo)
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}

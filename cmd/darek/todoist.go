@@ -70,7 +70,9 @@ func runTodoistSync(ctx context.Context, cfgPath string) error {
 	}
 
 	store := links.NewStore(pool)
-	res, err := todoistimport.Sync(ctx, td, store, nil)
+	va := buildVideoAnalyzer(cfg)
+	onVideo := buildVideoAutoAnalyze(va, store)
+	res, err := todoistimport.Sync(ctx, td, store, onVideo)
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
