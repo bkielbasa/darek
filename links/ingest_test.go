@@ -19,7 +19,7 @@ func TestIngestOne_Insert(t *testing.T) {
 	store := links.NewStore(db.Wrap(raw))
 	ctx := context.Background()
 
-	id, isNew, err := links.IngestOne(ctx, store, links.Candidate{
+	id, isNew, _, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:    "https://www.example.com/article?utm_source=twitter",
 		Title:  "Hello",
 		Source: "freshrss",
@@ -30,7 +30,7 @@ func TestIngestOne_Insert(t *testing.T) {
 	require.NotEqual(t, "00000000-0000-0000-0000-000000000000", id.String())
 
 	// Same URL, different referrer params → same canonical → upsert (not new).
-	_, isNew2, err := links.IngestOne(ctx, store, links.Candidate{
+	_, isNew2, _, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:    "https://example.com/article?fbclid=xyz",
 		Source: "user",
 	})
@@ -53,7 +53,7 @@ func TestIngestOne_KindClassifierApplies(t *testing.T) {
 	store := links.NewStore(db.Wrap(raw))
 	ctx := context.Background()
 
-	_, _, err := links.IngestOne(ctx, store, links.Candidate{
+	_, _, _, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:    "https://youtube.com/watch?v=abc",
 		Source: "freshrss",
 	})
@@ -69,11 +69,37 @@ func TestIngestOne_RejectsUnparseableURL(t *testing.T) {
 	require.NoError(t, db.Migrate(context.Background(), raw))
 	store := links.NewStore(db.Wrap(raw))
 
-	_, _, err := links.IngestOne(context.Background(), store, links.Candidate{
+	_, _, _, err := links.IngestOne(context.Background(), store, links.Candidate{
 		URL:    "not a url",
 		Source: "freshrss",
 	})
 	require.Error(t, err)
+}
+
+func TestIngestOne_ReturnsKind(t *testing.T) {
+	_, raw := pg.Start(t)
+	require.NoError(t, db.Migrate(context.Background(), raw))
+	store := links.NewStore(db.Wrap(raw))
+	ctx := context.Background()
+
+	tests := []struct {
+		url      string
+		wantKind string
+	}{
+		{"https://www.youtube.com/watch?v=abcDEF12345", "video"},
+		{"https://example.com/some-article", "article"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.wantKind, func(t *testing.T) {
+			_, _, kind, err := links.IngestOne(ctx, store, links.Candidate{
+				URL:    tc.url,
+				Title:  "t",
+				Source: "user",
+			})
+			require.NoError(t, err)
+			require.Equal(t, tc.wantKind, kind)
+		})
+	}
 }
 
 func TestIngestOne_StoresStrippedSummary(t *testing.T) {
@@ -82,7 +108,7 @@ func TestIngestOne_StoresStrippedSummary(t *testing.T) {
 	store := links.NewStore(db.Wrap(raw))
 	ctx := context.Background()
 
-	_, _, err := links.IngestOne(ctx, store, links.Candidate{
+	_, _, _, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:     "https://example.com/sum",
 		Title:   "Hello",
 		Source:  "freshrss",

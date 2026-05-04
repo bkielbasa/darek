@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"darek/agent"
 	"darek/config"
@@ -25,6 +27,7 @@ import (
 	mailsmtp "darek/tools/mail/smtp"
 	"darek/tools/todoist"
 	"darek/tools/freshrss"
+	"darek/tools/youtube"
 )
 
 func runChat(ctx context.Context, cfgPath, userInput string) error {
@@ -81,6 +84,11 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 		return err
 	}
 	if err := reg.Register(memory.SaveTool{Store: store}); err != nil {
+		return err
+	}
+
+	ytClient := youtube.NewClient(&http.Client{Timeout: 15 * time.Second})
+	if err := reg.Register(youtube.NewTranscript(ytClient)); err != nil {
 		return err
 	}
 

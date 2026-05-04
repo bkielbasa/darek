@@ -11,6 +11,7 @@ import (
 	"darek/obs"
 	"darek/tools/todoist"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -38,6 +39,11 @@ type Result struct {
 	Skipped   int // tasks without a URL
 	Errors    []error
 }
+
+// OnVideoIngestedFunc is called once per newly-ingested video link
+// (kind=="video", isNew=true). Errors are appended to Result.Errors but do
+// not abort sync.
+type OnVideoIngestedFunc func(ctx context.Context, linkID uuid.UUID, url, title string) error
 
 var urlRE = regexp.MustCompile(`https?://[^\s<>"']+`)
 
@@ -72,7 +78,7 @@ func normalizeLabels(in []string) []string {
 // Sync pulls #Inbox tasks, ingests URL-bearing ones via links.IngestOne,
 // merges Todoist labels into the link's tags, and completes the task.
 // Tasks without URLs are left alone (not completed).
-func Sync(ctx context.Context, c Lister, store *links.Store) (*Result, error) {
+func Sync(ctx context.Context, c Lister, store *links.Store, onVideoIngested OnVideoIngestedFunc) (*Result, error) {
 	ctx, span := tracer.Start(ctx, "todoistimport.sync")
 	defer span.End()
 
@@ -95,7 +101,7 @@ func Sync(ctx context.Context, c Lister, store *links.Store) (*Result, error) {
 	g.SetLimit(concurrency)
 	for i, t := range tasks {
 		g.Go(func() error {
-			outcomes[i] = processTask(gctx, c, store, t)
+			outcomes[i] = processTask(gctx, c, store, t, onVideoIngested)
 			return nil // never abort siblings — per-item errors are collected
 		})
 	}
@@ -142,7 +148,7 @@ type taskOutcome struct {
 // processTask runs the ingest/label/complete pipeline for a single task and
 // returns its outcome. Pure function over (ctx, c, store, t); safe to call
 // concurrently for distinct tasks.
-func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Task) taskOutcome {
+func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Task, onVideoIngested OnVideoIngestedFunc) taskOutcome {
 	rawURL := extractURL(t.Content, t.Description)
 	if rawURL == "" {
 		return taskOutcome{Skipped: true}
@@ -151,7 +157,7 @@ func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Ta
 	if title == "" {
 		title = rawURL
 	}
-	id, _, err := links.IngestOne(ctx, store, links.Candidate{
+	id, isNew, kind, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:     rawURL,
 		Title:   title,
 		Source:  "todoist",
@@ -172,10 +178,23 @@ func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Ta
 		}
 	}
 
+	o := taskOutcome{Imported: true}
 	if err := c.CompleteTask(ctx, t.ID); err != nil {
-		return taskOutcome{Imported: true, Err: fmt.Errorf("complete %s: %w", t.ID, err)}
+		o.Err = fmt.Errorf("complete %s: %w", t.ID, err)
+	} else {
+		o.Completed = true
 	}
-	return taskOutcome{Imported: true, Completed: true}
+
+	if isNew && kind == "video" && onVideoIngested != nil {
+		if cbErr := onVideoIngested(ctx, id, rawURL, title); cbErr != nil {
+			if o.Err == nil {
+				o.Err = fmt.Errorf("auto-analyze %s: %w", t.ID, cbErr)
+			} else {
+				o.Err = fmt.Errorf("%v; auto-analyze: %w", o.Err, cbErr)
+			}
+		}
+	}
+	return o
 }
 
 func recordDuration(ctx context.Context, start time.Time, outcome string) {

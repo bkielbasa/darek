@@ -116,3 +116,28 @@ func TestStore_Delete_ByURL(t *testing.T) {
 	got, _ := s.Search(ctx, SearchOpts{})
 	require.Empty(t, got)
 }
+
+func TestStore_ApplyAnalysis(t *testing.T) {
+	_, pool := pg.Start(t)
+	require.NoError(t, db.Migrate(context.Background(), pool))
+	s := NewStore(db.Wrap(pool))
+	ctx := context.Background()
+
+	// Seed a row with one existing tag.
+	id, err := s.Save(ctx, SaveInput{
+		URL:    "https://example.com/x",
+		Title:  "X",
+		Tags:   []string{"existing"},
+		Source: "user",
+	})
+	require.NoError(t, err)
+
+	err = s.ApplyAnalysis(ctx, id, "ai summary", []string{"new", "existing"})
+	require.NoError(t, err)
+
+	got, err := s.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, "ai summary", got.Summary)
+	require.NotNil(t, got.AnalyzedAt)
+	require.ElementsMatch(t, []string{"existing", "new"}, got.Tags)
+}

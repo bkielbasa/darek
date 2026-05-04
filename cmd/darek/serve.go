@@ -7,13 +7,11 @@ import (
 	"os"
 	"time"
 
-	"darek/analyze"
 	"darek/cmd/darek/serve"
 	"darek/config"
 	"darek/db"
 	"darek/freshrssimport"
 	"darek/links"
-	"darek/llm"
 	"darek/obs"
 	"darek/todoistimport"
 	"darek/tools/freshrss"
@@ -59,23 +57,15 @@ func runServe(ctx context.Context, cfgPath string) error {
 
 	store := links.NewStore(pool)
 
-	// Build the LLM client + analyzer if OpenAI is configured.
+	// Build the video-aware analyzer (nil if OpenAI is unconfigured). Used
+	// both as the manual-click Analyzer for the HTTP server and as the
+	// engine behind the sync auto-analyze callback.
+	va := buildVideoAnalyzer(cfg)
 	var analyzer serve.Analyzer
-	if apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv); err == nil && apiKey != "" {
-		llmClient, err := llm.New(llm.Options{
-			APIKey:  apiKey,
-			BaseURL: cfg.OpenAI.BaseURL,
-			Model:   cfg.OpenAI.Model,
-			Timeout: cfg.Agent.LLMTimeout,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "warn: llm client: %v (analyze button disabled)\n", err)
-		} else {
-			analyzer = analyze.New(llmClient)
-		}
-	} else {
-		fmt.Fprintf(os.Stderr, "info: openai not configured, analyze button disabled\n")
+	if va != nil {
+		analyzer = va
 	}
+	onVideo := buildVideoAutoAnalyze(va, store)
 
 	// Build the optional sync function — only if FreshRSS is configured.
 	var sync serve.SyncFn
@@ -93,7 +83,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 			return fmt.Errorf("freshrss client: %w", err)
 		}
 		sync = func(ctx context.Context) (string, error) {
-			res, err := freshrssimport.Sync(ctx, fr, store)
+			res, err := freshrssimport.Sync(ctx, fr, store, onVideo)
 			if err != nil {
 				return "", err
 			}
@@ -111,7 +101,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 				fmt.Fprintf(os.Stderr, "warn: todoist client: %v\n", err)
 			} else {
 				todoistSync = func(ctx context.Context) (string, error) {
-					res, err := todoistimport.Sync(ctx, td, store)
+					res, err := todoistimport.Sync(ctx, td, store, onVideo)
 					if err != nil {
 						return "", err
 					}

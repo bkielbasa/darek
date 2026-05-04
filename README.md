@@ -76,6 +76,9 @@ These are the tools the agent can call inside `darek chat`. Each is gated on rel
 
 **Mail**: `mail.search`, `mail.get_body`, `mail.get_attachment`, `mail.send` (`send` prompts on stderr for `y/N` confirmation).
 
+**YouTube**
+- `youtube.transcript(url, lang?)` — fetch a YouTube video's transcript as plain text. `lang` is optional (e.g. `"es"`); default prefers manual English, then auto-generated English, then the first available track. Returns title, channel, duration, then the transcript. Errors with `"no captions available"` when the video has no captions, or `"video not accessible..."` for private/removed/region-locked videos.
+
 ## Layout
 
 ```
@@ -218,6 +221,8 @@ For cron-driven sync without the server:
 URL canonicalization (strip `utm_*`, `fbclid`, etc.) deduplicates the same article reaching darek through multiple sources. Each link is auto-classified (`article` / `video` / `tweet` / `podcast`) by URL heuristics; you can override the kind from the UI.
 
 Each row has an **analyze** button that asks OpenAI to summarize the link and propose tags. Click it; the row updates in place. Tags merge into existing tags; the proposed summary overwrites whatever the source provided. Re-clicking refreshes both. The button is hidden if `openai.api_key_env` is unset.
+
+When `darek serve` (or the standalone `darek freshrss sync` / `darek todoist sync` cron commands) ingests a new YouTube video URL, it automatically fetches the transcript and runs the analyze step against the transcript instead of the YouTube description. Summary + tags are stored on the link without manual interaction. Failures (no captions, region-locked, OpenAI unavailable) are logged but don't abort sync; the row stays ingested with no `analyzed_at` set so you can click Analyze later.
 
 ## Mail
 

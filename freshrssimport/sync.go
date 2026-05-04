@@ -9,6 +9,7 @@ import (
 	"darek/obs"
 	"darek/tools/freshrss"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -37,11 +38,17 @@ type Result struct {
 	Errors     []error
 }
 
+// OnVideoIngestedFunc is called once per newly-ingested video link
+// (kind=="video", isNew=true). Errors are appended to Result.Errors but do
+// not abort sync. Implementations are typically a closure that wraps an
+// analyze step and persists summary+tags via *links.Store.ApplyAnalysis.
+type OnVideoIngestedFunc func(ctx context.Context, linkID uuid.UUID, url, title string) error
+
 // Sync pulls all unread FreshRSS articles, ingests them via links.IngestOne
 // (deduping on canonical URL), and marks each successfully-ingested article
 // as read. Per-article errors are collected and returned; they don't abort
 // the run.
-func Sync(ctx context.Context, fr Lister, store *links.Store) (*Result, error) {
+func Sync(ctx context.Context, fr Lister, store *links.Store, onVideoIngested OnVideoIngestedFunc) (*Result, error) {
 	ctx, span := tracer.Start(ctx, "freshrssimport.sync")
 	defer span.End()
 
@@ -64,7 +71,7 @@ func Sync(ctx context.Context, fr Lister, store *links.Store) (*Result, error) {
 	g.SetLimit(concurrency)
 	for i, a := range arts {
 		g.Go(func() error {
-			outcomes[i] = processArticle(gctx, fr, store, a)
+			outcomes[i] = processArticle(gctx, fr, store, a, onVideoIngested)
 			return nil // never abort siblings — per-item errors are collected
 		})
 	}
@@ -111,11 +118,11 @@ type articleOutcome struct {
 // processArticle runs the ingest/mark-read pipeline for a single article and
 // returns its outcome. Pure function over (ctx, fr, store, a); safe to call
 // concurrently for distinct articles.
-func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshrss.Article) articleOutcome {
+func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshrss.Article, onVideoIngested OnVideoIngestedFunc) articleOutcome {
 	if a.URL == "" {
 		return articleOutcome{Skipped: true}
 	}
-	_, _, err := links.IngestOne(ctx, store, links.Candidate{
+	id, isNew, kind, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:     a.URL,
 		Title:   a.Title,
 		Source:  "freshrss",
@@ -125,10 +132,24 @@ func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshr
 	if err != nil {
 		return articleOutcome{Err: fmt.Errorf("ingest %s: %w", a.ID, err)}
 	}
+
+	o := articleOutcome{Imported: true}
 	if err := fr.Mark(ctx, a.ID, freshrss.ActionMarkRead); err != nil {
-		return articleOutcome{Imported: true, Err: fmt.Errorf("mark %s read: %w", a.ID, err)}
+		o.Err = fmt.Errorf("mark %s read: %w", a.ID, err)
+	} else {
+		o.MarkedRead = true
 	}
-	return articleOutcome{Imported: true, MarkedRead: true}
+
+	if isNew && kind == "video" && onVideoIngested != nil {
+		if cbErr := onVideoIngested(ctx, id, a.URL, a.Title); cbErr != nil {
+			if o.Err == nil {
+				o.Err = fmt.Errorf("auto-analyze %s: %w", a.ID, cbErr)
+			} else {
+				o.Err = fmt.Errorf("%v; auto-analyze: %w", o.Err, cbErr)
+			}
+		}
+	}
+	return o
 }
 
 func recordDuration(ctx context.Context, start time.Time, outcome string) {
