@@ -76,6 +76,9 @@ These are the tools the agent can call inside `darek chat`. Each is gated on rel
 
 **Mail**: `mail.search`, `mail.get_body`, `mail.get_attachment`, `mail.send` (`send` prompts on stderr for `y/N` confirmation).
 
+**YouTube**
+- `youtube.transcript(url, lang?)` — fetch a YouTube video's transcript as plain text. `lang` is optional (e.g. `"es"`); default prefers manual English, then auto-generated English, then the first available track. Returns title, channel, duration, then the transcript. Errors with `"no captions available"` when the video has no captions, or `"video not accessible..."` for private/removed/region-locked videos.
+
 ## Layout
 
 ```
