@@ -111,7 +111,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 				fmt.Fprintf(os.Stderr, "warn: todoist client: %v\n", err)
 			} else {
 				todoistSync = func(ctx context.Context) (string, error) {
-					res, err := todoistimport.Sync(ctx, td, store)
+					res, err := todoistimport.Sync(ctx, td, store, nil)
 					if err != nil {
 						return "", err
 					}

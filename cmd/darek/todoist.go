@@ -70,7 +70,7 @@ func runTodoistSync(ctx context.Context, cfgPath string) error {
 	}
 
 	store := links.NewStore(pool)
-	res, err := todoistimport.Sync(ctx, td, store)
+	res, err := todoistimport.Sync(ctx, td, store, nil)
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
