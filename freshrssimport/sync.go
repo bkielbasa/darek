@@ -115,7 +115,7 @@ func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshr
 	if a.URL == "" {
 		return articleOutcome{Skipped: true}
 	}
-	_, _, err := links.IngestOne(ctx, store, links.Candidate{
+	_, _, _, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:     a.URL,
 		Title:   a.Title,
 		Source:  "freshrss",

@@ -51,7 +51,7 @@ func (st SaveTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	}
 
 	// 1) Canonicalize + classify + upsert via the shared pipeline.
-	id, _, err := IngestOne(ctx, st.Store, Candidate{
+	id, _, _, err := IngestOne(ctx, st.Store, Candidate{
 		URL:    p.URL,
 		Title:  p.Title,
 		Source: source,

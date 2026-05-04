@@ -151,7 +151,7 @@ func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Ta
 	if title == "" {
 		title = rawURL
 	}
-	id, _, err := links.IngestOne(ctx, store, links.Candidate{
+	id, _, _, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:     rawURL,
 		Title:   title,
 		Source:  "todoist",

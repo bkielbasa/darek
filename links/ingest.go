@@ -22,17 +22,18 @@ type Candidate struct {
 }
 
 // IngestOne canonicalizes the URL, infers kind if unset, and upserts via the
-// store. Returns the resulting link id and whether it was a brand-new row.
+// store. Returns the resulting link id, whether it was a brand-new row, and
+// the resolved kind.
 //
 // On metrics failure, ingestion proceeds without recording (matches the
 // "instrumentation never blocks real work" contract).
-func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool, error) {
+func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool, string, error) {
 	if store == nil {
-		return uuid.Nil, false, errors.New("links.IngestOne: store is required")
+		return uuid.Nil, false, "", errors.New("links.IngestOne: store is required")
 	}
 	canon := Canonicalize(c.URL)
 	if canon == "" {
-		return uuid.Nil, false, fmt.Errorf("links.IngestOne: unparseable url %q", c.URL)
+		return uuid.Nil, false, "", fmt.Errorf("links.IngestOne: unparseable url %q", c.URL)
 	}
 
 	kind := c.Kind
@@ -49,7 +50,7 @@ func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool,
 		if errors.Is(err, ErrNoRows()) {
 			isNew = true
 		} else if err != nil {
-			return uuid.Nil, false, fmt.Errorf("links.IngestOne lookup: %w", err)
+			return uuid.Nil, false, "", fmt.Errorf("links.IngestOne lookup: %w", err)
 		}
 	}
 
@@ -70,7 +71,7 @@ func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool,
 				attribute.String("outcome", "error"),
 			))
 		}
-		return uuid.Nil, false, err
+		return uuid.Nil, false, kind, err
 	}
 	if store.m != nil {
 		store.m.LinksIngest.Add(ctx, 1, metric.WithAttributes(
@@ -79,7 +80,7 @@ func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool,
 			attribute.String("outcome", "ok"),
 		))
 	}
-	return id, isNew, nil
+	return id, isNew, kind, nil
 }
 
 // normalizeSource clamps unknown source values to "other" to bound cardinality.

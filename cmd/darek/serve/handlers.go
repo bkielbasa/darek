@@ -298,7 +298,7 @@ func (s *Server) handleNew(w http.ResponseWriter, r *http.Request) {
 	tags := splitCSV(r.FormValue("tags"))
 	notes := strings.TrimSpace(r.FormValue("notes"))
 
-	id, _, err := links.IngestOne(r.Context(), s.store, links.Candidate{
+	id, _, _, err := links.IngestOne(r.Context(), s.store, links.Candidate{
 		URL:    rawURL,
 		Source: "user",
 	})
