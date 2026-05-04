@@ -74,7 +74,7 @@ func runFreshRSSSync(ctx context.Context, cfgPath string) error {
 	}
 
 	store := links.NewStore(pool)
-	res, err := freshrssimport.Sync(ctx, fr, store)
+	res, err := freshrssimport.Sync(ctx, fr, store, nil)
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}

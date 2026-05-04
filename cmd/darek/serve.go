@@ -93,7 +93,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 			return fmt.Errorf("freshrss client: %w", err)
 		}
 		sync = func(ctx context.Context) (string, error) {
-			res, err := freshrssimport.Sync(ctx, fr, store)
+			res, err := freshrssimport.Sync(ctx, fr, store, nil)
 			if err != nil {
 				return "", err
 			}
