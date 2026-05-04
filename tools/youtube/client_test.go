@@ -3,6 +3,7 @@ package youtube
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -96,6 +97,46 @@ func TestPickTrack(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestParseJSON3(t *testing.T) {
+	b, err := os.ReadFile("testdata/transcript.json3")
+	require.NoError(t, err)
+
+	got, err := parseJSON3(b)
+	require.NoError(t, err)
+	require.Equal(t, "Hello, world. This is a test. Multiple spaces.", got)
+}
+
+func TestParseJSON3_Empty(t *testing.T) {
+	got, err := parseJSON3([]byte(`{"events":[]}`))
+	require.NoError(t, err)
+	require.Equal(t, "", got)
+}
+
+func TestParseJSON3_Bad(t *testing.T) {
+	_, err := parseJSON3([]byte(`{not json`))
+	require.Error(t, err)
+}
+
+func TestFormatDuration(t *testing.T) {
+	cases := []struct {
+		in   time.Duration
+		want string
+	}{
+		{42 * time.Second, "42s"},
+		{59 * time.Second, "59s"},
+		{60 * time.Second, "1m 00s"},
+		{7*time.Minute + 13*time.Second, "7m 13s"},
+		{59*time.Minute + 59*time.Second, "59m 59s"},
+		{1 * time.Hour, "1h 00m 00s"},
+		{1*time.Hour + 42*time.Minute + 9*time.Second, "1h 42m 09s"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.want, func(t *testing.T) {
+			require.Equal(t, tc.want, formatDuration(tc.in))
 		})
 	}
 }

@@ -154,3 +154,45 @@ func pickTrack(tracks []captionTrack, lang string) (captionTrack, error) {
 	}
 	return tracks[0], nil
 }
+
+type json3Doc struct {
+	Events []struct {
+		Segs []struct {
+			Utf8 string `json:"utf8"`
+		} `json:"segs"`
+	} `json:"events"`
+}
+
+var wsRe = regexp.MustCompile(`\s+`)
+
+// parseJSON3 walks the JSON3 events and returns the concatenated transcript text
+// with all whitespace runs (including newlines) collapsed to single spaces and trimmed.
+func parseJSON3(b []byte) (string, error) {
+	var d json3Doc
+	if err := json.Unmarshal(b, &d); err != nil {
+		return "", fmt.Errorf("parse json3: %w", err)
+	}
+	var sb strings.Builder
+	for i, ev := range d.Events {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
+		for _, s := range ev.Segs {
+			sb.WriteString(s.Utf8)
+		}
+	}
+	collapsed := wsRe.ReplaceAllString(sb.String(), " ")
+	return strings.TrimSpace(collapsed), nil
+}
+
+// formatDuration renders d as "42s" (<1m), "7m 13s" (<1h), or "1h 42m 09s" (>=1h).
+func formatDuration(d time.Duration) string {
+	total := int(d / time.Second)
+	if total < 60 {
+		return fmt.Sprintf("%ds", total)
+	}
+	if total < 3600 {
+		return fmt.Sprintf("%dm %02ds", total/60, total%60)
+	}
+	return fmt.Sprintf("%dh %02dm %02ds", total/3600, (total%3600)/60, total%60)
+}
