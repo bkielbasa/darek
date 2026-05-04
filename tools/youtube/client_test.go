@@ -233,3 +233,18 @@ func TestFetch_BadURL(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "invalid YouTube URL")
 }
+
+func TestFetch_WatchHTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	c := NewClient(srv.Client())
+	c.base = srv.URL
+
+	_, err := c.Fetch(context.Background(), "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "fetch watch page")
+	require.Contains(t, err.Error(), "HTTP 403")
+}

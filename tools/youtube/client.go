@@ -202,6 +202,11 @@ func formatDuration(d time.Duration) string {
 
 const userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
+// maxBodyBytes caps watch-page and transcript responses. Watch pages are
+// typically ~1-2 MiB; JSON3 transcripts well under 1 MiB. 5 MiB is generous
+// and prevents a misbehaving response from exhausting memory.
+const maxBodyBytes = 5 << 20
+
 // Fetch returns the transcript Result for a video. lang is optional ("" = default fallback).
 func (c *Client) Fetch(ctx context.Context, rawURL, lang string) (Result, error) {
 	id, err := ExtractVideoID(rawURL)
@@ -265,7 +270,8 @@ func (c *Client) getBytes(ctx context.Context, url string) ([]byte, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 }
