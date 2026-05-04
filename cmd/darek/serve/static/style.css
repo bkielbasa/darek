@@ -559,3 +559,37 @@ body.auth {
   font-size: 13px;
   text-align: center;
 }
+
+/* ---- WhatsApp ---- */
+.inline { display: inline; }
+
+.hint {
+  color: #666;
+  font-style: italic;
+  font-size: 0.9em;
+}
+
+.qr {
+  display: block;
+  margin: 1.5rem auto;
+  width: 256px;
+  height: 256px;
+}
+
+.danger {
+  color: #b00020;
+  border-color: #b00020;
+}
+
+.wa-groups td.meta {
+  color: #666;
+  font-size: 0.9em;
+}
+
+.wa-row td:first-child {
+  text-align: center;
+  width: 3rem;
+}
+
+.ok   { color: #1b8c2a; font-weight: 600; }
+.warn { color: #b00020; font-weight: 600; }

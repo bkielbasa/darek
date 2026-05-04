@@ -133,7 +133,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 		return err
 	}
 
-	srv, err := serve.New(store, sync, analyzer, authCfg)
+	srv, err := serve.New(store, sync, analyzer, authCfg, nil)
 	if err != nil {
 		return err
 	}
