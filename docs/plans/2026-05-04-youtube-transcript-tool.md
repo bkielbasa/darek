@@ -573,13 +573,19 @@ var wsRe = regexp.MustCompile(`\s+`)
 
 // parseJSON3 walks the JSON3 events and returns the concatenated transcript text
 // with all whitespace runs (including newlines) collapsed to single spaces and trimmed.
+// A single space is inserted before each event past the first so consecutive events
+// like "Hello, world." and "This is a test." don't run together as "world.This is".
+// The collapse pass washes out any resulting double-spaces at empty-event boundaries.
 func parseJSON3(b []byte) (string, error) {
 	var d json3Doc
 	if err := json.Unmarshal(b, &d); err != nil {
 		return "", fmt.Errorf("parse json3: %w", err)
 	}
 	var sb strings.Builder
-	for _, ev := range d.Events {
+	for i, ev := range d.Events {
+		if i > 0 {
+			sb.WriteByte(' ')
+		}
 		for _, s := range ev.Segs {
 			sb.WriteString(s.Utf8)
 		}
