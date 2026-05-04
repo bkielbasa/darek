@@ -222,6 +222,8 @@ URL canonicalization (strip `utm_*`, `fbclid`, etc.) deduplicates the same artic
 
 Each row has an **analyze** button that asks OpenAI to summarize the link and propose tags. Click it; the row updates in place. Tags merge into existing tags; the proposed summary overwrites whatever the source provided. Re-clicking refreshes both. The button is hidden if `openai.api_key_env` is unset.
 
+When `darek serve` (or the standalone `darek freshrss sync` / `darek todoist sync` cron commands) ingests a new YouTube video URL, it automatically fetches the transcript and runs the analyze step against the transcript instead of the YouTube description. Summary + tags are stored on the link without manual interaction. Failures (no captions, region-locked, OpenAI unavailable) are logged but don't abort sync; the row stays ingested with no `analyzed_at` set so you can click Analyze later.
+
 ## Mail
 
 Mail uses a hybrid sync model: envelopes (subject, from, date, snippet) are cached in Postgres, bodies and attachments are fetched live from IMAP on demand.
