@@ -63,3 +63,39 @@ func TestParsePlayerResponse_Private(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not accessible")
 }
+
+func TestPickTrack(t *testing.T) {
+	en := captionTrack{LanguageCode: "en"}
+	enAuto := captionTrack{LanguageCode: "en", Kind: "asr"}
+	es := captionTrack{LanguageCode: "es"}
+	fr := captionTrack{LanguageCode: "fr"}
+
+	cases := []struct {
+		name    string
+		tracks  []captionTrack
+		lang    string
+		want    captionTrack
+		wantErr string // substring match
+	}{
+		{"empty", nil, "", captionTrack{}, "no captions available"},
+		{"empty with lang", nil, "en", captionTrack{}, "no captions available"},
+		{"manual en preferred over auto", []captionTrack{enAuto, en}, "", en, ""},
+		{"only auto en", []captionTrack{enAuto}, "", enAuto, ""},
+		{"first when no en", []captionTrack{fr, es}, "", fr, ""},
+		{"explicit es", []captionTrack{en, es}, "es", es, ""},
+		{"explicit en exact", []captionTrack{enAuto, en}, "en", enAuto, ""}, // first match wins on explicit
+		{"explicit missing", []captionTrack{en}, "fr", captionTrack{}, `language "fr" not available; have: en`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := pickTrack(tc.tracks, tc.lang)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

@@ -120,3 +120,37 @@ func parsePlayerResponse(html string) (*playerResponse, error) {
 	}
 	return &pr, nil
 }
+
+func pickTrack(tracks []captionTrack, lang string) (captionTrack, error) {
+	if len(tracks) == 0 {
+		return captionTrack{}, fmt.Errorf("no captions available")
+	}
+	if lang != "" {
+		for _, t := range tracks {
+			if t.LanguageCode == lang {
+				return t, nil
+			}
+		}
+		var have []string
+		seen := map[string]bool{}
+		for _, t := range tracks {
+			if !seen[t.LanguageCode] {
+				seen[t.LanguageCode] = true
+				have = append(have, t.LanguageCode)
+			}
+		}
+		return captionTrack{}, fmt.Errorf("language %q not available; have: %s", lang, strings.Join(have, ", "))
+	}
+	// Default fallback: manual en, then auto en, then first track.
+	for _, t := range tracks {
+		if t.LanguageCode == "en" && t.Kind == "" {
+			return t, nil
+		}
+	}
+	for _, t := range tracks {
+		if t.LanguageCode == "en" && t.Kind == "asr" {
+			return t, nil
+		}
+	}
+	return tracks[0], nil
+}
