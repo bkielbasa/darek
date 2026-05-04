@@ -15,6 +15,7 @@ type Config struct {
 	Mail      Mail          `yaml:"mail"`
 	Server    Server        `yaml:"server"`
 	Auth      Auth          `yaml:"auth"`
+	WhatsApp  WhatsApp      `yaml:"whatsapp"`
 
 	CalendarDigest CalendarDigest `yaml:"calendar_digest"`
 }
@@ -77,6 +78,11 @@ type Auth struct {
 	PasswordHashEnv string        `yaml:"password_hash_env"`
 	SessionKeyEnv   string        `yaml:"session_key_env"`
 	SessionTTL      time.Duration `yaml:"session_ttl"` // optional; default 720h
+}
+
+type WhatsApp struct {
+	Enabled   bool   `yaml:"enabled"`
+	StorePath string `yaml:"store_path"` // sqlite path for whatsmeow session; defaults to ~/.darek/whatsapp/store.db
 }
 
 type CalendarSrc struct {
