@@ -10,12 +10,16 @@ import (
 	"time"
 
 	"darek/db"
+	"darek/obs"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // Options configures NewManager. StorePath is the SQLite session file (created
@@ -240,6 +244,7 @@ func (m *Manager) ingestMessage(ctx context.Context, e *events.Message) {
 		senderName = e.Info.Sender.String()
 	}
 
+	outcome := "ok"
 	if err := m.store.InsertMessage(ctx, Message{
 		ID:         e.Info.ID,
 		GroupJID:   groupJID,
@@ -250,6 +255,13 @@ func (m *Manager) ingestMessage(ctx context.Context, e *events.Message) {
 		SentAt:     e.Info.Timestamp,
 	}); err != nil {
 		m.logger.Warnf("insert message: %v", err)
+		outcome = "error"
+	}
+	if mInst, _ := obs.MetricsInstance(); mInst != nil {
+		mInst.WhatsAppMessages.Add(ctx, 1, metric.WithAttributes(
+			attribute.String("kind", kind),
+			attribute.String("outcome", outcome),
+		))
 	}
 }
 

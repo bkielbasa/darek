@@ -48,6 +48,9 @@ type Metrics struct {
 
 	// Todoist source
 	TodoistSyncDuration metric.Float64Histogram
+
+	// WhatsApp ingest
+	WhatsAppMessages metric.Int64Counter
 }
 
 var (
@@ -108,6 +111,7 @@ func MetricsInstance() (*Metrics, error) {
 			FreshRSSSyncDuration:   f64hist(m.Float64Histogram("darek.freshrss.sync_duration", metric.WithUnit("s"))),
 			LinksAnalyze:           i64(m.Int64Counter("darek.links.analyze")),
 			TodoistSyncDuration:    f64hist(m.Float64Histogram("darek.todoist.sync_duration", metric.WithUnit("s"))),
+			WhatsAppMessages:       i64(m.Int64Counter("darek.whatsapp.messages_ingested")),
 		}
 		metricsErr = err
 	})
