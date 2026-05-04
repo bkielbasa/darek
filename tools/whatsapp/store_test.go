@@ -17,7 +17,7 @@ func newTestStore(t *testing.T) (*Store, context.Context) {
 	t.Helper()
 	_, raw := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), raw))
-	return NewStore(raw), context.Background()
+	return NewStore(db.Wrap(raw)), context.Background()
 }
 
 func TestStore_UpsertGroup_PreservesIngestEnabled(t *testing.T) {
