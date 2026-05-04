@@ -399,7 +399,10 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if m, _ := obs.MetricsInstance(); m != nil {
-			m.LinksAnalyze.Add(r.Context(), 1, metric.WithAttributes(attribute.String("outcome", "error")))
+			m.LinksAnalyze.Add(r.Context(), 1, metric.WithAttributes(
+				attribute.String("outcome", "error"),
+				attribute.String("trigger", "manual"),
+			))
 		}
 		// Render the row with an inline error in the summary slot.
 		cur.Summary = fmt.Sprintf("analysis failed: %v", err)
@@ -407,18 +410,15 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := s.store.Pool().Exec(r.Context(), `
-		UPDATE links
-		   SET summary     = $2,
-		       tags        = ARRAY(SELECT DISTINCT unnest(tags || $3::text[])),
-		       analyzed_at = now(),
-		       updated_at  = now()
-		 WHERE id = $1`, id, out.Summary, out.Tags); err != nil {
+	if err := s.store.ApplyAnalysis(r.Context(), id, out.Summary, out.Tags); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if m, _ := obs.MetricsInstance(); m != nil {
-		m.LinksAnalyze.Add(r.Context(), 1, metric.WithAttributes(attribute.String("outcome", "ok")))
+		m.LinksAnalyze.Add(r.Context(), 1, metric.WithAttributes(
+			attribute.String("outcome", "ok"),
+			attribute.String("trigger", "manual"),
+		))
 	}
 
 	cur, err = s.fetchOne(r.Context(), id)
