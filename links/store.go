@@ -349,3 +349,19 @@ func (s *Store) Get(ctx context.Context, id uuid.UUID) (Link, error) {
 	}
 	return got[0], nil
 }
+
+// ApplyAnalysis writes the AI analyze result for a link: overwrites summary,
+// merges tags into existing tags (deduped), and bumps analyzed_at.
+//
+// Takes primitive types (not analyze.Output) to avoid a links → analyze import.
+// Callers unpack at the call site.
+func (s *Store) ApplyAnalysis(ctx context.Context, id uuid.UUID, summary string, tags []string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE links
+		   SET summary     = $2,
+		       tags        = ARRAY(SELECT DISTINCT unnest(tags || $3::text[])),
+		       analyzed_at = now(),
+		       updated_at  = now()
+		 WHERE id = $1`, id, summary, tags)
+	return err
+}
