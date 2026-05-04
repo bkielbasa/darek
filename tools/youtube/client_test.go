@@ -1,6 +1,7 @@
 package youtube
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,4 +38,28 @@ func TestExtractVideoID(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestParsePlayerResponse_Happy(t *testing.T) {
+	b, err := os.ReadFile("testdata/watch_with_captions.html")
+	require.NoError(t, err)
+
+	pr, err := parsePlayerResponse(string(b))
+	require.NoError(t, err)
+	require.Equal(t, "Test Video", pr.VideoDetails.Title)
+	require.Equal(t, "Test Channel", pr.VideoDetails.Author)
+	require.Equal(t, "433", pr.VideoDetails.LengthSeconds)
+	require.Len(t, pr.Captions.Tracklist.CaptionTracks, 2)
+	require.Equal(t, "en", pr.Captions.Tracklist.CaptionTracks[0].LanguageCode)
+	require.Equal(t, "", pr.Captions.Tracklist.CaptionTracks[0].Kind)
+	require.Equal(t, "asr", pr.Captions.Tracklist.CaptionTracks[1].Kind)
+}
+
+func TestParsePlayerResponse_Private(t *testing.T) {
+	b, err := os.ReadFile("testdata/watch_private.html")
+	require.NoError(t, err)
+
+	_, err = parsePlayerResponse(string(b))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "not accessible")
 }
