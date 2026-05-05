@@ -168,6 +168,8 @@ Run it ad-hoc, or hook it up to cron / launchd:
 
 The email renders as a card per day (rounded corners, calendar-name pills colored by hash, "Today" badge on the first card) with a plaintext fallback. Each event line shows time, calendar, summary, and optional location. Empty days print "Nothing scheduled" rather than being hidden, so a silent miss is debuggable.
 
+When WhatsApp is configured (see the WhatsApp section below) and at least one group is opted in, this email also includes a per-group summary of recent WhatsApp activity below the calendar.
+
 Exits non-zero with a clear stderr message if `to` or `from_account` is missing or `from_account` doesn't match a configured `mail.accounts[].nickname`.
 
 ## Todoist
@@ -281,7 +283,11 @@ Each group has a checkbox. Toggle the ones you want tracked. Messages start land
 
 Text messages go in verbatim. Media (images, voice, video, documents, stickers) become short placeholders like `[image]`, `[voice 12s]`, `[document: report.pdf]` — sufficient for future summarization, no media payloads downloaded. Reactions, edits, deletes, and reply-quoted context are dropped. Direct messages are not ingested at all (groups only).
 
-Sub-projects B (`whatsapp.summarize_group` agent tool) and C (`whatsapp.send` agent tool) build on this base; they ship as separate plans.
+### Daily digest summary
+
+When the daily-digest cron runs (`darek calendar daily-digest`) and at least one WhatsApp group is opted-in, the email gains a "WhatsApp" section after the calendar one. Each section lists one short LLM-generated summary per group, covering messages received since the previous digest. Only groups with new messages appear; if no group has activity since the last run, the WhatsApp section is omitted. The lookback is capped at 7 days — if `darek serve` was offline longer than that, older messages are not summarized.
+
+The chat-side `whatsapp.summarize_group` agent tool and the `whatsapp.send` tool are separate plans; they would build on the same `Summarizer` and `Store`.
 
 ## Roadmap
 
