@@ -1,7 +1,9 @@
 package serve
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
 	"darek/tools/whatsapp"
 
@@ -42,11 +44,6 @@ func (s *Server) handleWhatsApp(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleWhatsAppQR(w http.ResponseWriter, r *http.Request) {
 	state := s.whatsApp.PairingState()
-	if state.Paired {
-		w.Header().Set("HX-Redirect", "/whatsapp")
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
 	if state.QRCode == "" {
 		http.Error(w, "no QR yet", http.StatusServiceUnavailable)
 		return
@@ -59,6 +56,23 @@ func (s *Server) handleWhatsAppQR(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(png)
+}
+
+// handleWhatsAppQRRefresh returns an <img> element wrapping the rotating QR.
+// HTMX polls this endpoint and swaps the result into #qr-wrap; the browser
+// then loads the actual PNG via the natural <img src> mechanism (rather than
+// HTMX trying to swap raw PNG bytes into the DOM as text).
+//
+// Once paired, returns 204 + HX-Redirect so HTMX swaps the page to State B.
+func (s *Server) handleWhatsAppQRRefresh(w http.ResponseWriter, r *http.Request) {
+	state := s.whatsApp.PairingState()
+	if state.Paired {
+		w.Header().Set("HX-Redirect", "/whatsapp")
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, `<img class="qr" src="/whatsapp/qr.png?t=%d">`, time.Now().UnixNano())
 }
 
 func (s *Server) handleWhatsAppToggleGroup(w http.ResponseWriter, r *http.Request) {

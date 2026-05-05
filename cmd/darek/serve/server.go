@@ -87,6 +87,7 @@ func (s *Server) routes() {
 	if s.whatsApp != nil {
 		s.mux.HandleFunc("GET /whatsapp", s.handleWhatsApp)
 		s.mux.HandleFunc("GET /whatsapp/qr.png", s.handleWhatsAppQR)
+		s.mux.HandleFunc("GET /whatsapp/qr-refresh", s.handleWhatsAppQRRefresh)
 		s.mux.HandleFunc("POST /whatsapp/groups/{jid}/toggle", s.handleWhatsAppToggleGroup)
 		s.mux.HandleFunc("POST /whatsapp/groups/refresh", s.handleWhatsAppRefreshGroups)
 		s.mux.HandleFunc("POST /whatsapp/unpair", s.handleWhatsAppUnpair)

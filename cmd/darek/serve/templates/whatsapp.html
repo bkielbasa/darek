@@ -40,8 +40,12 @@
     <p>Open WhatsApp on your phone → <em>Settings</em> → <em>Linked devices</em> →
        <em>Link a device</em> and scan this code:</p>
 
-    <img class="qr" src="/whatsapp/qr.png"
-         hx-get="/whatsapp/qr.png" hx-trigger="every 20s" hx-swap="outerHTML">
+    <div id="qr-wrap"
+         hx-get="/whatsapp/qr-refresh"
+         hx-trigger="every 20s"
+         hx-swap="innerHTML">
+      <img class="qr" src="/whatsapp/qr.png">
+    </div>
 
     <p class="hint">Refreshes every 20 seconds. Once paired, this page swaps to your groups list.</p>
   {{end}}
