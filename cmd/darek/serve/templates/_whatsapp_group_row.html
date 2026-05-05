@@ -1,12 +1,11 @@
 {{define "_whatsapp_group_row.html"}}
 <tr id="wa-row-{{.JID}}" class="wa-row">
   <td>
-    <form hx-post="/whatsapp/groups/{{.JID}}/toggle"
-          hx-target="#wa-row-{{.JID}}"
-          hx-swap="outerHTML"
-          hx-trigger="change">
-      <input type="checkbox" name="enabled" value="1" {{if .IngestEnabled}}checked{{end}}>
-    </form>
+    <input type="checkbox" name="enabled" value="1" {{if .IngestEnabled}}checked{{end}}
+           hx-post="/whatsapp/groups/{{.JID}}/toggle"
+           hx-target="#wa-row-{{.JID}}"
+           hx-swap="outerHTML"
+           hx-trigger="change">
   </td>
   <td>{{.Name}}</td>
   <td class="meta">
