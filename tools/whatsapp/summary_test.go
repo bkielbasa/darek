@@ -105,3 +105,53 @@ func TestSummarize_TruncatesLongTranscriptToTail(t *testing.T) {
 	// Tail-bias: the LAST message bytes must be in there; the FIRST may not be.
 	require.Contains(t, chat.gotUserContent, msgs[len(msgs)-1].Body)
 }
+
+func TestRenderText_TwoSections(t *testing.T) {
+	t1a := time.Date(2026, 5, 5, 9, 11, 0, 0, time.UTC)
+	t1b := time.Date(2026, 5, 5, 17, 33, 0, 0, time.UTC)
+	t2a := time.Date(2026, 5, 5, 14, 2, 0, 0, time.UTC)
+	t2b := time.Date(2026, 5, 5, 22, 48, 0, 0, time.UTC)
+	sections := []whatsapp.Section{
+		{GroupName: "Family", Summary: "Anna shared photos.", MessageCount: 12, FirstSentAt: t2a, LastSentAt: t2b},
+		{GroupName: "Work", Summary: "Discussed migration.", MessageCount: 47, FirstSentAt: t1a, LastSentAt: t1b},
+	}
+
+	got := whatsapp.RenderText(sections)
+	require.Contains(t, got, "WhatsApp — last 24h")
+	require.Contains(t, got, "▸ Family (12 messages,")
+	require.Contains(t, got, "▸ Work (47 messages,")
+	require.Contains(t, got, "Anna shared photos.")
+	require.Contains(t, got, "Discussed migration.")
+}
+
+func TestRenderText_EmptyInputIsEmpty(t *testing.T) {
+	require.Equal(t, "", whatsapp.RenderText(nil))
+	require.Equal(t, "", whatsapp.RenderText([]whatsapp.Section{}))
+}
+
+func TestRenderHTML_TwoSections(t *testing.T) {
+	sections := []whatsapp.Section{
+		{GroupName: "Family", Summary: "Anna shared photos.", MessageCount: 12,
+			FirstSentAt: time.Date(2026, 5, 5, 14, 2, 0, 0, time.UTC),
+			LastSentAt:  time.Date(2026, 5, 5, 22, 48, 0, 0, time.UTC)},
+	}
+	got := whatsapp.RenderHTML(sections)
+	require.Contains(t, got, `<h2`)
+	require.Contains(t, got, `WhatsApp`)
+	require.Contains(t, got, `<strong>Family</strong>`)
+	require.Contains(t, got, `Anna shared photos.`)
+}
+
+func TestRenderHTML_EscapesHostileGroupName(t *testing.T) {
+	sections := []whatsapp.Section{
+		{GroupName: `<script>alert(1)</script>`, Summary: "x", MessageCount: 1,
+			FirstSentAt: time.Now(), LastSentAt: time.Now()},
+	}
+	got := whatsapp.RenderHTML(sections)
+	require.NotContains(t, got, "<script>")
+	require.Contains(t, got, "&lt;script&gt;")
+}
+
+func TestRenderHTML_EmptyInputIsEmpty(t *testing.T) {
+	require.Equal(t, "", whatsapp.RenderHTML(nil))
+}

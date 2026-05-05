@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/openai/openai-go"
 )
@@ -70,4 +71,116 @@ func buildSummaryUserMessage(groupName string, msgs []Message) string {
 		transcript = transcript[len(transcript)-maxTranscriptChars:]
 	}
 	return fmt.Sprintf("Group: %s\n\n%s", groupName, transcript)
+}
+
+// Section is one row of the WhatsApp digest section: the group's name, the
+// LLM summary, plus minimal metadata for the rendered email.
+type Section struct {
+	GroupName    string
+	Summary      string
+	MessageCount int
+	FirstSentAt  time.Time
+	LastSentAt   time.Time
+}
+
+// RenderText renders sections as plain text. Empty input → "".
+func RenderText(sections []Section) string {
+	if len(sections) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("WhatsApp — last 24h\n")
+	b.WriteString(strings.Repeat("─", 19))
+	b.WriteString("\n\n")
+	for i, s := range sections {
+		fmt.Fprintf(&b, "▸ %s (%d messages, %s)\n",
+			s.GroupName, s.MessageCount, formatTimeRange(s.FirstSentAt, s.LastSentAt))
+		for _, line := range wrapText(s.Summary, 75) {
+			fmt.Fprintf(&b, "   %s\n", line)
+		}
+		if i < len(sections)-1 {
+			b.WriteString("\n")
+		}
+	}
+	return b.String()
+}
+
+// RenderHTML renders sections as inline-styled HTML safe for email clients.
+// Empty input → "".
+func RenderHTML(sections []Section) string {
+	if len(sections) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<section class="wa-digest" style="margin-top:1.5rem;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#1c1c1c;">`)
+	b.WriteString(`<h2 style="margin:0 0 .75rem;font-size:1.05rem;font-weight:600;">WhatsApp</h2>`)
+	for _, s := range sections {
+		b.WriteString(`<div style="background:#fff;border:1px solid #e8e3d8;border-radius:6px;padding:.75rem 1rem;margin-bottom:.5rem;">`)
+		fmt.Fprintf(&b, `<div style="margin-bottom:.35rem;"><strong>%s</strong> <span style="color:#6b6b6b;font-size:.9em;"> · %d messages · %s</span></div>`,
+			htmlEscape(s.GroupName), s.MessageCount, htmlEscape(formatTimeRange(s.FirstSentAt, s.LastSentAt)))
+		fmt.Fprintf(&b, `<div style="line-height:1.45;">%s</div>`, htmlEscape(s.Summary))
+		b.WriteString(`</div>`)
+	}
+	b.WriteString(`</section>`)
+	return b.String()
+}
+
+// formatTimeRange shows "14:02–22:48" if both ends are on the same day,
+// otherwise "Mon 14:02 – Tue 22:48".
+func formatTimeRange(from, to time.Time) string {
+	from, to = from.Local(), to.Local()
+	if sameDay(from, to) {
+		return fmt.Sprintf("%s–%s", from.Format("15:04"), to.Format("15:04"))
+	}
+	return fmt.Sprintf("%s %s – %s %s",
+		from.Format("Mon"), from.Format("15:04"),
+		to.Format("Mon"), to.Format("15:04"))
+}
+
+func sameDay(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	return ay == by && am == bm && ad == bd
+}
+
+// wrapText word-wraps s at width, returning lines (no trailing newline).
+// Naive: splits on whitespace, no hyphenation, no smart fitting.
+func wrapText(s string, width int) []string {
+	words := strings.Fields(s)
+	if len(words) == 0 {
+		return []string{s}
+	}
+	var lines []string
+	var cur strings.Builder
+	for _, w := range words {
+		if cur.Len() == 0 {
+			cur.WriteString(w)
+			continue
+		}
+		if cur.Len()+1+len(w) > width {
+			lines = append(lines, cur.String())
+			cur.Reset()
+			cur.WriteString(w)
+			continue
+		}
+		cur.WriteByte(' ')
+		cur.WriteString(w)
+	}
+	if cur.Len() > 0 {
+		lines = append(lines, cur.String())
+	}
+	return lines
+}
+
+// htmlEscape replaces the four characters that affect HTML parsing.
+// We don't use html/template here because we want the surrounding wrapper
+// HTML in our format string and only the user-supplied bits escaped.
+func htmlEscape(s string) string {
+	r := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		`"`, "&quot;",
+	)
+	return r.Replace(s)
 }
