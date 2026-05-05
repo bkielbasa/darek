@@ -184,3 +184,71 @@ func htmlEscape(s string) string {
 	)
 	return r.Replace(s)
 }
+
+// LookbackDays bounds how far back BuildSummary will look at unsummarized
+// messages. Bounded so a long darek-serve outage doesn't dump weeks of
+// messages into a single summary, which would be both expensive and useless.
+const LookbackDays = 7
+
+// SummarizerInterface is the subset of *Summarizer used by BuildSummary —
+// kept narrow so tests can inject a stub.
+type SummarizerInterface interface {
+	Summarize(ctx context.Context, groupName string, msgs []Message) (string, error)
+}
+
+// BuildSummary pulls opted-in groups, fetches their unsummarized messages
+// from the last LookbackDays, summarizes each non-empty group, and returns
+// the rendered sections plus the message IDs to mark summarized after the
+// email is sent.
+//
+// Failure of one group's summarization is logged via the provided logger
+// (or silently skipped if logger is nil) and does not abort the others;
+// the failing group's IDs are not included in the returned slice (so
+// tomorrow retries).
+func BuildSummary(
+	ctx context.Context,
+	store *Store,
+	summarizer SummarizerInterface,
+	logger func(format string, a ...any),
+) ([]Section, []string, error) {
+	if logger == nil {
+		logger = func(string, ...any) {}
+	}
+
+	groups, err := store.OptedInGroups(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("opted-in groups: %w", err)
+	}
+
+	var sections []Section
+	var ids []string
+
+	for _, g := range groups {
+		msgs, err := store.UnsummarizedMessages(ctx, g.JID, LookbackDays)
+		if err != nil {
+			return nil, nil, fmt.Errorf("unsummarized for %s: %w", g.JID, err)
+		}
+		if len(msgs) == 0 {
+			continue
+		}
+
+		summary, err := summarizer.Summarize(ctx, g.Name, msgs)
+		if err != nil {
+			logger("whatsapp summary skipped for %q: %v\n", g.Name, err)
+			continue
+		}
+
+		sections = append(sections, Section{
+			GroupName:    g.Name,
+			Summary:      summary,
+			MessageCount: len(msgs),
+			FirstSentAt:  msgs[0].SentAt,
+			LastSentAt:   msgs[len(msgs)-1].SentAt,
+		})
+		for _, m := range msgs {
+			ids = append(ids, m.ID)
+		}
+	}
+
+	return sections, ids, nil
+}
