@@ -112,3 +112,73 @@ func (s *Store) Groups(ctx context.Context) ([]Group, error) {
 	}
 	return out, rows.Err()
 }
+
+// OptedInGroups returns groups where ingest_enabled = true, ordered by name.
+// Used by BuildSummary as the outer loop.
+func (s *Store) OptedInGroups(ctx context.Context) ([]Group, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT g.jid, g.name, g.ingest_enabled,
+		       COALESCE(c.cnt, 0)         AS msg_count,
+		       c.last                      AS last_at
+		  FROM whatsapp_groups g
+		  LEFT JOIN (
+		    SELECT group_jid, count(*) AS cnt, max(sent_at) AS last
+		      FROM whatsapp_messages
+		     GROUP BY group_jid
+		  ) c ON c.group_jid = g.jid
+		 WHERE g.ingest_enabled = true
+		 ORDER BY g.name
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Group
+	for rows.Next() {
+		var g Group
+		if err := rows.Scan(&g.JID, &g.Name, &g.IngestEnabled, &g.MessageCount, &g.LastMessageAt); err != nil {
+			return nil, err
+		}
+		out = append(out, g)
+	}
+	return out, rows.Err()
+}
+
+// UnsummarizedMessages returns messages for the group where summarized_at IS
+// NULL and sent_at >= now() - lookbackDays. Sorted ascending by sent_at.
+func (s *Store) UnsummarizedMessages(ctx context.Context, groupJID string, lookbackDays int) ([]Message, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, group_jid, sender_jid, sender_name, kind, body, sent_at
+		  FROM whatsapp_messages
+		 WHERE group_jid = $1
+		   AND summarized_at IS NULL
+		   AND sent_at >= now() - make_interval(days => $2)
+		 ORDER BY sent_at
+	`, groupJID, lookbackDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.GroupJID, &m.SenderJID, &m.SenderName, &m.Kind, &m.Body, &m.SentAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// MarkSummarized sets summarized_at = now() for the given message IDs in one
+// statement. Idempotent: messages already summarized or missing IDs are
+// silently skipped (the WHERE clause matches nothing for them).
+func (s *Store) MarkSummarized(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE whatsapp_messages SET summarized_at = now() WHERE id = ANY($1)`,
+		ids)
+	return err
+}
