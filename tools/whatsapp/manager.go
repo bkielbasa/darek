@@ -62,8 +62,11 @@ func NewManager(opts Options) (*Manager, error) {
 	}
 
 	dbLog := waLog.Stdout("wadb", "WARN", true)
+	// modernc.org/sqlite uses ?_pragma=foreign_keys(on) syntax (not the
+	// mattn/go-sqlite3 ?_foreign_keys=on shorthand). Whatsmeow's sqlstore
+	// fails to start if foreign_keys is off — its migrations rely on cascades.
 	container, err := sqlstore.New(context.Background(), "sqlite3",
-		fmt.Sprintf("file:%s?_foreign_keys=on", opts.StorePath), dbLog)
+		fmt.Sprintf("file:%s?_pragma=foreign_keys(on)", opts.StorePath), dbLog)
 	if err != nil {
 		return nil, fmt.Errorf("sqlstore: %w", err)
 	}
