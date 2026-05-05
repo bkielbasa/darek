@@ -120,3 +120,68 @@ func TestStore_DeleteGroupCascadesMessages(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
 }
+
+func TestStore_OptedInGroups(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	require.NoError(t, s.UpsertGroup(ctx, "g1@g.us", "G1"))
+	require.NoError(t, s.UpsertGroup(ctx, "g2@g.us", "G2"))
+	require.NoError(t, s.UpsertGroup(ctx, "g3@g.us", "G3"))
+	require.NoError(t, s.SetIngestEnabled(ctx, "g1@g.us", true))
+	require.NoError(t, s.SetIngestEnabled(ctx, "g3@g.us", true))
+
+	got, err := s.OptedInGroups(ctx)
+	require.NoError(t, err)
+	jids := []string{}
+	for _, g := range got {
+		jids = append(jids, g.JID)
+	}
+	require.ElementsMatch(t, []string{"g1@g.us", "g3@g.us"}, jids)
+}
+
+func TestStore_UnsummarizedMessages_FiltersAndOrder(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	require.NoError(t, s.UpsertGroup(ctx, "g1@g.us", "G1"))
+
+	old := time.Now().UTC().Add(-30 * 24 * time.Hour).Truncate(time.Second)
+	mid := time.Now().UTC().Add(-2 * time.Hour).Truncate(time.Second)
+	rec := time.Now().UTC().Add(-1 * time.Hour).Truncate(time.Second)
+
+	require.NoError(t, s.InsertMessage(ctx, Message{ID: "old", GroupJID: "g1@g.us", SenderJID: "x", SenderName: "x", Kind: "text", Body: "long ago", SentAt: old}))
+	require.NoError(t, s.InsertMessage(ctx, Message{ID: "mid", GroupJID: "g1@g.us", SenderJID: "x", SenderName: "x", Kind: "text", Body: "earlier", SentAt: mid}))
+	require.NoError(t, s.InsertMessage(ctx, Message{ID: "rec", GroupJID: "g1@g.us", SenderJID: "x", SenderName: "x", Kind: "text", Body: "recent", SentAt: rec}))
+
+	msgs, err := s.UnsummarizedMessages(ctx, "g1@g.us", 7)
+	require.NoError(t, err)
+	require.Len(t, msgs, 2, "old message outside 7-day window must be excluded")
+	require.Equal(t, "mid", msgs[0].ID, "ASC by sent_at")
+	require.Equal(t, "rec", msgs[1].ID)
+}
+
+func TestStore_MarkSummarized(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	require.NoError(t, s.UpsertGroup(ctx, "g1@g.us", "G1"))
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, s.InsertMessage(ctx, Message{ID: "m1", GroupJID: "g1@g.us", SenderJID: "x", SenderName: "x", Kind: "text", Body: "a", SentAt: now}))
+	require.NoError(t, s.InsertMessage(ctx, Message{ID: "m2", GroupJID: "g1@g.us", SenderJID: "x", SenderName: "x", Kind: "text", Body: "b", SentAt: now}))
+
+	require.NoError(t, s.MarkSummarized(ctx, []string{"m1"}))
+
+	left, err := s.UnsummarizedMessages(ctx, "g1@g.us", 7)
+	require.NoError(t, err)
+	require.Len(t, left, 1)
+	require.Equal(t, "m2", left[0].ID)
+
+	require.NoError(t, s.MarkSummarized(ctx, []string{"m1", "missing"}))
+	left, err = s.UnsummarizedMessages(ctx, "g1@g.us", 7)
+	require.NoError(t, err)
+	require.Len(t, left, 1)
+}
+
+func TestStore_MarkSummarized_EmptyIsNoop(t *testing.T) {
+	s, ctx := newTestStore(t)
+	require.NoError(t, s.MarkSummarized(ctx, nil))
+	require.NoError(t, s.MarkSummarized(ctx, []string{}))
+}
