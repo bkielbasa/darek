@@ -1,0 +1,20 @@
+{{define "_whatsapp_group_row.html"}}
+<tr id="wa-row-{{.JID}}" class="wa-row">
+  <td>
+    <form hx-post="/whatsapp/groups/{{.JID}}/toggle"
+          hx-target="#wa-row-{{.JID}}" hx-swap="outerHTML"
+          hx-trigger="change from:closest form">
+      <input type="checkbox" name="enabled" value="1" {{if .IngestEnabled}}checked{{end}}>
+    </form>
+  </td>
+  <td>{{.Name}}</td>
+  <td class="meta">
+    {{if .IngestEnabled}}
+      {{.MessageCount}} stored
+      {{if .LastMessageAtRel}}— last msg {{.LastMessageAtRel}} ago{{end}}
+    {{else}}
+      —
+    {{end}}
+  </td>
+</tr>
+{{end}}

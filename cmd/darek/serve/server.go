@@ -10,6 +10,7 @@ import (
 
 	"darek/analyze"
 	"darek/links"
+	"darek/tools/whatsapp"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
@@ -22,24 +23,35 @@ type Analyzer interface {
 	Analyze(ctx context.Context, in analyze.Input) (analyze.Output, error)
 }
 
+// WhatsAppManager is the subset of *whatsapp.Manager used by the HTTP server.
+// Defined as an interface so tests can supply a fake.
+type WhatsAppManager interface {
+	PairingState() whatsapp.PairingState
+	Groups(ctx context.Context) ([]whatsapp.Group, error)
+	RefreshGroups(ctx context.Context) error
+	SetIngestEnabled(ctx context.Context, jid string, on bool) error
+	Unpair(ctx context.Context) error
+}
+
 // Server is the HTTP UI for browsing and rating links.
 type Server struct {
-	store   *links.Store
-	tmpl    *template.Template
-	mux     *http.ServeMux
-	sync    SyncFn
-	analyze Analyzer
-	auth    AuthConfig
+	store    *links.Store
+	tmpl     *template.Template
+	mux      *http.ServeMux
+	sync     SyncFn
+	analyze  Analyzer
+	auth     AuthConfig
+	whatsApp WhatsAppManager // nil-safe; routes only register when non-nil
 }
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
 // If analyzer is nil, /links/{id}/analyze returns 501 and the UI hides the button.
-func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig) (*Server, error) {
+func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, wa WhatsAppManager) (*Server, error) {
 	t, err := parseTemplates()
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync, analyze: analyzer, auth: auth}
+	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync, analyze: analyzer, auth: auth, whatsApp: wa}
 	s.routes()
 	return s, nil
 }
@@ -71,6 +83,14 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /links/{id}/notes", s.handleNotes)
 	s.mux.HandleFunc("POST /links/{id}/kind", s.handleKind)
 	s.mux.HandleFunc("POST /links/{id}/analyze", s.handleAnalyze)
+
+	if s.whatsApp != nil {
+		s.mux.HandleFunc("GET /whatsapp", s.handleWhatsApp)
+		s.mux.HandleFunc("GET /whatsapp/qr.png", s.handleWhatsAppQR)
+		s.mux.HandleFunc("POST /whatsapp/groups/{jid}/toggle", s.handleWhatsAppToggleGroup)
+		s.mux.HandleFunc("POST /whatsapp/groups/refresh", s.handleWhatsAppRefreshGroups)
+		s.mux.HandleFunc("POST /whatsapp/unpair", s.handleWhatsAppUnpair)
+	}
 }
 
 // Run starts the server on bind and blocks until ctx is canceled.

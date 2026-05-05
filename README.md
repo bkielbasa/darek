@@ -257,6 +257,32 @@ Periodic sync is invoked manually (cron suggested):
 
 Tools enabled in chat: `mail.search`, `mail.get_body`, `mail.get_attachment`, `mail.send`. Sending prompts you to confirm (`y/N`) on stderr; the message is sent via SMTP and appended to your Sent folder via IMAP.
 
+## WhatsApp
+
+WhatsApp integration uses the unofficial multi-device protocol via [whatsmeow](https://github.com/tulir/whatsmeow). **This violates WhatsApp's Terms of Service.** A read-only personal-account ingest carries some risk of your number being banned by Meta. You opt in by enabling the feature in config; you can disable it instantly by flipping the flag.
+
+### Configure
+
+```yaml
+whatsapp:
+  enabled: true
+  store_path: ~/.darek/whatsapp/store.db   # whatsmeow session SQLite (auto-created)
+```
+
+### Pair
+
+Start `darek serve`, open <http://127.0.0.1:7777/whatsapp>, scan the QR code from your phone (WhatsApp → Settings → Linked devices → Link a device). Once paired, the page swaps to a list of your groups.
+
+### Pick groups
+
+Each group has a checkbox. Toggle the ones you want tracked. Messages start landing in `whatsapp_messages` immediately for opted-in groups. Click *Refresh from WhatsApp* to pick up newly-joined groups. Click *Unpair* to log out and wipe the local session (Postgres data is preserved).
+
+### What's stored
+
+Text messages go in verbatim. Media (images, voice, video, documents, stickers) become short placeholders like `[image]`, `[voice 12s]`, `[document: report.pdf]` — sufficient for future summarization, no media payloads downloaded. Reactions, edits, deletes, and reply-quoted context are dropped. Direct messages are not ingested at all (groups only).
+
+Sub-projects B (`whatsapp.summarize_group` agent tool) and C (`whatsapp.send` agent tool) build on this base; they ship as separate plans.
+
 ## Roadmap
 
 All MVP plans (foundations, calendars, todoist, mail receive, mail send) plus calendar write tools and the daily-digest email have shipped. Future work:

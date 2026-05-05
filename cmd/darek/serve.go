@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"darek/todoistimport"
 	"darek/tools/freshrss"
 	"darek/tools/todoist"
+	"darek/tools/whatsapp"
 )
 
 func runServe(ctx context.Context, cfgPath string) error {
@@ -56,6 +58,23 @@ func runServe(ctx context.Context, cfgPath string) error {
 	}
 
 	store := links.NewStore(pool)
+
+	var waManager *whatsapp.Manager
+	if cfg.WhatsApp.Enabled {
+		var err error
+		waManager, err = whatsapp.NewManager(whatsapp.Options{
+			StorePath: cfg.WhatsApp.StorePath,
+			Pool:      pool,
+		})
+		if err != nil {
+			return fmt.Errorf("whatsapp manager: %w", err)
+		}
+		go func() {
+			if err := waManager.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				fmt.Fprintf(os.Stderr, "whatsapp: %v\n", err)
+			}
+		}()
+	}
 
 	// Build the video-aware analyzer (nil if OpenAI is unconfigured). Used
 	// both as the manual-click Analyzer for the HTTP server and as the
@@ -133,7 +152,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 		return err
 	}
 
-	srv, err := serve.New(store, sync, analyzer, authCfg)
+	srv, err := serve.New(store, sync, analyzer, authCfg, waManager)
 	if err != nil {
 		return err
 	}
