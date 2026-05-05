@@ -2,8 +2,9 @@
 <tr id="wa-row-{{.JID}}" class="wa-row">
   <td>
     <form hx-post="/whatsapp/groups/{{.JID}}/toggle"
-          hx-target="#wa-row-{{.JID}}" hx-swap="outerHTML"
-          hx-trigger="change from:closest form">
+          hx-target="#wa-row-{{.JID}}"
+          hx-swap="outerHTML"
+          hx-trigger="change">
       <input type="checkbox" name="enabled" value="1" {{if .IngestEnabled}}checked{{end}}>
     </form>
   </td>

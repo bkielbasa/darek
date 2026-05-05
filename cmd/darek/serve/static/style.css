@@ -569,17 +569,54 @@ body.auth {
   font-size: 0.9em;
 }
 
-.qr {
+.wa-page {
+  max-width: 900px;
+  margin: 1.5rem auto;
+  padding: 0 1rem;
+}
+
+.wa-page h1 { margin-top: 0; }
+
+.wa-page h2 {
+  margin-top: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.wa-page form.inline {
+  display: inline;
+  margin: 0;
+}
+
+#qr-wrap .qr {
   display: block;
   margin: 1.5rem auto;
   width: 256px;
   height: 256px;
+  border: 1px solid #ddd;
+  background: #fff;
 }
 
 .danger {
   color: #b00020;
   border-color: #b00020;
 }
+
+.wa-groups {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+}
+
+.wa-groups th,
+.wa-groups td {
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #eee;
+}
+
+.wa-groups th { background: #f5f5f7; font-weight: 600; }
 
 .wa-groups td.meta {
   color: #666;
@@ -590,6 +627,8 @@ body.auth {
   text-align: center;
   width: 3rem;
 }
+
+.wa-row form { margin: 0; }
 
 .ok   { color: #1b8c2a; font-weight: 600; }
 .warn { color: #b00020; font-weight: 600; }
