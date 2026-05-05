@@ -569,58 +569,138 @@ body.auth {
   font-size: 0.9em;
 }
 
+/* ---------- WhatsApp page ---------- */
 .wa-page {
   max-width: 900px;
-  margin: 1.5rem auto;
-  padding: 0 1rem;
+  margin: 2rem auto 4rem;
+  padding: 0 1.5rem;
 }
 
-.wa-page h1 { margin-top: 0; }
+.wa-page h1 {
+  margin: 0 0 1.5rem;
+  font-size: 1.75rem;
+  letter-spacing: -.02em;
+}
 
 .wa-page h2 {
-  margin-top: 2rem;
+  margin: 2.5rem 0 .9rem;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text);
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: .75rem;
 }
 
 .wa-page form.inline {
-  display: inline;
+  display: inline-flex;
   margin: 0;
 }
 
+.wa-page p { color: var(--text-dim); }
+.wa-page p b { color: var(--text); }
+
+/* status chip */
+.wa-status {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .5rem .85rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: .25rem 0 1.25rem;
+  color: var(--text-dim);
+  font-size: .92rem;
+}
+.wa-status b { color: var(--text); }
+
+.wa-status .dot {
+  width: .5rem; height: .5rem; border-radius: 50%;
+  background: var(--text-faint);
+}
+.wa-status.is-online .dot { background: #9ece6a; box-shadow: 0 0 0 4px rgba(158, 206, 106, .15); }
+.wa-status.is-offline .dot { background: #f7768e; }
+.wa-status.is-online  b.status-label { color: #9ece6a; }
+.wa-status.is-offline b.status-label { color: #f7768e; }
+
+/* legacy classes still referenced by older partials */
+.ok   { color: #9ece6a; font-weight: 600; }
+.warn { color: #f7768e; font-weight: 600; }
+
+/* danger button — subtle red border, fills on hover */
+button.danger {
+  color: #f7768e;
+  border-color: var(--border);
+}
+button.danger:hover {
+  border-color: #f7768e;
+  background: rgba(247, 118, 142, .08);
+}
+
+/* QR pairing area */
+#qr-wrap {
+  display: flex;
+  justify-content: center;
+}
 #qr-wrap .qr {
   display: block;
   margin: 1.5rem auto;
   width: 256px;
   height: 256px;
-  border: 1px solid #ddd;
-  background: #fff;
+  padding: .75rem;
+  background: #fff;             /* QR scanners want light bg */
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
 }
 
-.danger {
-  color: #b00020;
-  border-color: #b00020;
+.wa-page p.hint {
+  text-align: center;
+  color: var(--text-faint);
+  font-size: .88rem;
+  margin: 0 0 2rem;
 }
 
+/* groups table */
 .wa-groups {
   width: 100%;
-  border-collapse: collapse;
-  margin-top: 0.75rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
 }
 
-.wa-groups th,
-.wa-groups td {
+.wa-groups thead th {
   text-align: left;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #eee;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding: .65rem 1rem;
+  border-bottom: 1px solid var(--border);
 }
 
-.wa-groups th { background: #f5f5f7; font-weight: 600; }
+.wa-groups tbody td {
+  padding: .65rem 1rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.wa-groups tbody tr:last-child td { border-bottom: none; }
+
+.wa-groups tbody tr:hover { background: var(--surface-2); }
 
 .wa-groups td.meta {
-  color: #666;
-  font-size: 0.9em;
+  color: var(--text-dim);
+  font-size: .9em;
+  text-align: right;
+  white-space: nowrap;
 }
 
 .wa-row td:first-child {
@@ -628,7 +708,29 @@ body.auth {
   width: 3rem;
 }
 
-.wa-row form { margin: 0; }
-
-.ok   { color: #1b8c2a; font-weight: 600; }
-.warn { color: #b00020; font-weight: 600; }
+/* prettier checkbox using the accent color */
+.wa-row input[type="checkbox"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.1rem; height: 1.1rem;
+  margin: 0;
+  border: 1.5px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: border-color .12s, background .12s;
+}
+.wa-row input[type="checkbox"]:hover { border-color: var(--accent); }
+.wa-row input[type="checkbox"]:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.wa-row input[type="checkbox"]:checked::after {
+  content: "";
+  width: .55rem; height: .3rem;
+  border-left: 2px solid var(--bg);
+  border-bottom: 2px solid var(--bg);
+  transform: rotate(-45deg) translate(1px, -1px);
+}

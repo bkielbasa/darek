@@ -21,10 +21,12 @@
   <h1>WhatsApp</h1>
 
   {{if .State.Paired}}
-    <p>
-      Connected as <b>{{.State.DeviceName}}</b>{{if .State.PhoneE164}} ({{.State.PhoneE164}}){{end}}.
-      Status: {{if .State.Connected}}<span class="ok">online</span>{{else}}<span class="warn">offline</span>{{end}}.
-    </p>
+    <div class="wa-status {{if .State.Connected}}is-online{{else}}is-offline{{end}}">
+      <span class="dot"></span>
+      Connected as <b>{{.State.DeviceName}}</b>{{if .State.PhoneE164}}<span class="muted"> · {{.State.PhoneE164}}</span>{{end}}
+      <span class="spacer-sm"></span>
+      <b class="status-label">{{if .State.Connected}}online{{else}}offline{{end}}</b>
+    </div>
     <form action="/whatsapp/unpair" method="post" class="inline">
       <button type="submit" class="danger">Unpair this device</button>
     </form>
