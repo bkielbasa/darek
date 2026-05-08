@@ -125,3 +125,26 @@ func TestResolveProjectID_HitAndMiss(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "Nope")
 }
+
+func TestDeleteTask(t *testing.T) {
+	c, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodDelete, r.Method)
+		require.True(t, strings.HasSuffix(r.URL.Path, "/tasks/abc"))
+		w.WriteHeader(204)
+	})
+	require.NoError(t, c.DeleteTask(context.Background(), "abc"))
+}
+
+func TestCreateTask_DueDatetime(t *testing.T) {
+	c, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		require.Contains(t, string(body), `"due_datetime":"2026-05-07T09:00:00+02:00"`)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"99","content":"Post"}`))
+	})
+	_, err := c.CreateTask(context.Background(), CreateRequest{
+		Content:     "Post",
+		DueDatetime: "2026-05-07T09:00:00+02:00",
+	})
+	require.NoError(t, err)
+}

@@ -117,6 +117,7 @@ type CreateRequest struct {
 	Priority    int      `json:"priority,omitempty"`
 	DueString   string   `json:"due_string,omitempty"`
 	DueDate     string   `json:"due_date,omitempty"`
+	DueDatetime string   `json:"due_datetime,omitempty"`
 	Labels      []string `json:"labels,omitempty"`
 }
 
@@ -130,6 +131,12 @@ func (c *Client) CreateTask(ctx context.Context, req CreateRequest) (*Task, erro
 
 func (c *Client) CompleteTask(ctx context.Context, id string) error {
 	return c.doJSON(ctx, "complete_task", http.MethodPost, "/tasks/"+id+"/close", nil, nil)
+}
+
+// DeleteTask removes a task. Used by blog-marketing rollback when 9-task
+// creation partially fails.
+func (c *Client) DeleteTask(ctx context.Context, id string) error {
+	return c.doJSON(ctx, "delete_task", http.MethodDelete, "/tasks/"+id, nil, nil)
 }
 
 type UpdateRequest struct {
