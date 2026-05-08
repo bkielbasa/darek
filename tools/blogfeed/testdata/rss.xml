@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Example</title>
+    <item>
+      <title>Newer post</title>
+      <link>https://blog.example.com/newer?utm_source=feed</link>
+      <pubDate>Wed, 06 May 2026 14:00:00 +0000</pubDate>
+      <description>Hello world summary.</description>
+    </item>
+    <item>
+      <title>Older post</title>
+      <link>https://blog.example.com/older</link>
+      <pubDate>Mon, 04 May 2026 09:00:00 +0000</pubDate>
+      <description>Older summary.</description>
+    </item>
+  </channel>
+</rss>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <item>
+      <title>DC date only</title>
+      <link>https://blog.example.com/dc-date</link>
+      <dc:date>2026-05-03T08:00:00Z</dc:date>
+      <description>Has dc:date but no pubDate.</description>
+    </item>
+  </channel>
+</rss>
