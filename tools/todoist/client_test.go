@@ -92,3 +92,36 @@ func TestErrorPropagation(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "401")
 }
+
+func TestListProjects_Paginated(t *testing.T) {
+	calls := 0
+	c, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/projects", r.URL.Path)
+		calls++
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("cursor") == "" {
+			_, _ = w.Write([]byte(`{"results":[{"id":"100","name":"Inbox"},{"id":"200","name":"Marketing"}],"next_cursor":"NEXT"}`))
+			return
+		}
+		require.Equal(t, "NEXT", r.URL.Query().Get("cursor"))
+		_, _ = w.Write([]byte(`{"results":[{"id":"300","name":"Side"}]}`))
+	})
+	got, err := c.ListProjects(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 2, calls, "should follow pagination")
+	require.Len(t, got, 3)
+	require.Equal(t, "Marketing", got[1].Name)
+}
+
+func TestResolveProjectID_HitAndMiss(t *testing.T) {
+	c, _ := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"results":[{"id":"42","name":"Marketing"}]}`))
+	})
+	id, err := c.ResolveProjectID(context.Background(), "Marketing")
+	require.NoError(t, err)
+	require.Equal(t, "42", id)
+
+	_, err = c.ResolveProjectID(context.Background(), "Nope")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "Nope")
+}

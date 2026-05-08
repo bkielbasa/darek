@@ -79,6 +79,16 @@ type listEnvelope struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+type Project struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type listProjectsEnvelope struct {
+	Results    []Project `json:"results"`
+	NextCursor string    `json:"next_cursor,omitempty"`
+}
+
 func (c *Client) ListTasks(ctx context.Context, f ListFilter) ([]Task, error) {
 	q := url.Values{}
 	path := "/tasks"
@@ -136,6 +146,42 @@ func (c *Client) UpdateTask(ctx context.Context, id string, req UpdateRequest) (
 		return nil, err
 	}
 	return &out, nil
+}
+
+// ListProjects returns every Todoist project the authenticated user can see.
+func (c *Client) ListProjects(ctx context.Context) ([]Project, error) {
+	var out []Project
+	cursor := ""
+	for {
+		q := url.Values{}
+		if cursor != "" {
+			q.Set("cursor", cursor)
+		}
+		var env listProjectsEnvelope
+		if err := c.doJSON(ctx, "list_projects", http.MethodGet, "/projects?"+q.Encode(), nil, &env); err != nil {
+			return nil, err
+		}
+		out = append(out, env.Results...)
+		if env.NextCursor == "" {
+			return out, nil
+		}
+		cursor = env.NextCursor
+	}
+}
+
+// ResolveProjectID looks up a project by exact name. Returns an error mentioning
+// the requested name if no match is found.
+func (c *Client) ResolveProjectID(ctx context.Context, name string) (string, error) {
+	projects, err := c.ListProjects(ctx)
+	if err != nil {
+		return "", fmt.Errorf("list projects: %w", err)
+	}
+	for _, p := range projects {
+		if p.Name == name {
+			return p.ID, nil
+		}
+	}
+	return "", fmt.Errorf("todoist project %q not found", name)
 }
 
 func (c *Client) doJSON(ctx context.Context, op, method, path string, body, out any) error {
