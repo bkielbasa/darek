@@ -8,13 +8,16 @@ import (
 	"os"
 	"time"
 
+	"darek/blogmarketing"
 	"darek/cmd/darek/serve"
 	"darek/config"
 	"darek/db"
 	"darek/freshrssimport"
 	"darek/links"
+	"darek/llm"
 	"darek/obs"
 	"darek/todoistimport"
+	"darek/tools/blogfeed"
 	"darek/tools/freshrss"
 	"darek/tools/todoist"
 	"darek/tools/whatsapp"
@@ -131,6 +134,53 @@ func runServe(ctx context.Context, cfgPath string) error {
 		}
 	}
 
+	var blogSync serve.SyncFn
+	if cfg.BlogMarketing.FeedURL != "" {
+		apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
+		if err != nil {
+			return fmt.Errorf("blog_marketing openai key: %w", err)
+		}
+		llmClient, err := llm.New(llm.Options{APIKey: apiKey, BaseURL: cfg.OpenAI.BaseURL, Model: cfg.OpenAI.Model})
+		if err != nil {
+			return fmt.Errorf("blog_marketing llm: %w", err)
+		}
+		tdToken, err := config.ResolveSecret("env:" + cfg.Todoist.TokenEnv)
+		if err != nil {
+			return fmt.Errorf("blog_marketing todoist token: %w", err)
+		}
+		td, err := todoist.New(todoist.Options{Token: tdToken})
+		if err != nil {
+			return fmt.Errorf("blog_marketing todoist: %w", err)
+		}
+		feed, err := blogfeed.New(blogfeed.Options{URL: cfg.BlogMarketing.FeedURL})
+		if err != nil {
+			return fmt.Errorf("blog_marketing feed: %w", err)
+		}
+		bmStore := blogmarketing.NewStore(pool)
+		drafter := blogmarketing.NewOpenAIDrafter(llmClient)
+		bcfg := blogmarketing.Config{
+			FeedURL:      cfg.BlogMarketing.FeedURL,
+			ProjectName:  cfg.BlogMarketing.ProjectName,
+			PostTime:     cfg.BlogMarketing.PostTime,
+			SyncInterval: cfg.BlogMarketing.SyncInterval,
+		}
+		if cfg.BlogMarketing.Timezone != "" {
+			loc, err := time.LoadLocation(cfg.BlogMarketing.Timezone)
+			if err != nil {
+				return fmt.Errorf("blog_marketing timezone: %w", err)
+			}
+			bcfg.Timezone = loc
+		}
+		blogSync = func(ctx context.Context) (string, error) {
+			res, err := blogmarketing.Sync(ctx, feed, bmStore, drafter, td, bcfg)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("scheduled=%d backfill_seen=%d skipped=%d errors=%d",
+				res.Scheduled, res.BackfillSeen, res.Skipped, len(res.Errors)), nil
+		}
+	}
+
 	authUsername, err := config.ResolveSecret("env:" + cfg.Auth.UsernameEnv)
 	if err != nil {
 		return fmt.Errorf("auth username: %w (set Auth.UsernameEnv in config and the env var in secrets)", err)
@@ -163,6 +213,9 @@ func runServe(ctx context.Context, cfgPath string) error {
 	}
 	if todoistSync != nil && cfg.Todoist.SyncInterval > 0 {
 		go runSyncLoop(ctx, todoistSync, cfg.Todoist.SyncInterval, "todoist")
+	}
+	if blogSync != nil && cfg.BlogMarketing.SyncInterval > 0 {
+		go runSyncLoop(ctx, blogSync, cfg.BlogMarketing.SyncInterval, "blog")
 	}
 
 	fmt.Fprintf(os.Stderr, "darek serve listening on %s\n", cfg.Server.Bind)
