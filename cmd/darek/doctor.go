@@ -10,6 +10,8 @@ import (
 	"darek/config"
 	"darek/db"
 	"darek/llm"
+	"darek/tools/blogfeed"
+	"darek/tools/todoist"
 )
 
 func runMigrate(ctx context.Context, cfgPath string) error {
@@ -74,6 +76,22 @@ func runDoctor(ctx context.Context, cfgPath string) error {
 		add("otel exporter reachable", err, cfg.OTEL.ExporterEndpoint)
 		if err == nil {
 			conn.Close()
+		}
+		if cfg.BlogMarketing.FeedURL != "" {
+			feed, err := blogfeed.New(blogfeed.Options{URL: cfg.BlogMarketing.FeedURL, Timeout: 5 * time.Second})
+			add("blog_marketing feed client", err, cfg.BlogMarketing.FeedURL)
+			if err == nil {
+				_, lErr := feed.List(ctx)
+				add("blog_marketing feed reachable", lErr, "ok")
+			}
+			if cfg.Todoist.TokenEnv != "" {
+				if tok, terr := config.ResolveSecret("env:" + cfg.Todoist.TokenEnv); terr == nil && tok != "" {
+					if td, terr := todoist.New(todoist.Options{Token: tok, Timeout: 5 * time.Second}); terr == nil {
+						_, rerr := td.ResolveProjectID(ctx, cfg.BlogMarketing.ProjectName)
+						add("blog_marketing project resolvable", rerr, fmt.Sprintf("project=%s", cfg.BlogMarketing.ProjectName))
+					}
+				}
+			}
 		}
 	}
 

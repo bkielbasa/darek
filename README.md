@@ -44,6 +44,7 @@ Open Jaeger at <http://localhost:16686>.
 | `darek "<prompt>"` | One-shot agent run. |
 | `darek migrate` | Apply embedded SQL migrations to Postgres. |
 | `darek doctor` | Health check (Postgres, OTEL, OpenAI, configured sources). |
+| `darek blog sync` | Poll the configured blog RSS feed; for new posts, create 9 marketing tasks in Todoist (X / Mastodon / LinkedIn × launch / +2w / +3mo). |
 | `darek serve` | HTTP server on `127.0.0.1:7777` (RSS inbox UI + background pollers). |
 | `darek calendar refresh-token <nickname>` | Run the Google OAuth flow for one configured Google calendar. |
 | `darek calendar daily-digest` | Send a 3-day calendar digest email (today + 2 days). |
@@ -195,6 +196,39 @@ For cron-driven sync without the server:
 ```
 
 `darek serve` polls Todoist on the configured `sync_interval` cadence (parallel to FreshRSS).
+
+## Blog → Marketing Todoist
+
+When the user publishes a new post on their blog, `darek` schedules a 9-task social-promotion campaign in the Todoist `Marketing` project: one task per platform (X, Mastodon, LinkedIn) at three cadences (publication day, +14 days, +90 days). Each task contains an LLM-drafted, ready-to-send post tailored to its platform and cadence.
+
+### Configure
+
+```yaml
+blog_marketing:
+  feed_url: https://blog.example.com/feed.xml
+  project_name: Marketing
+  sync_interval: 15m       # 0 disables the in-server loop
+  post_time: "09:00"       # local time-of-day for every task
+  timezone: Europe/Warsaw  # optional; default = system local
+```
+
+The Todoist project name is resolved at runtime against the Todoist projects API. Six labels are auto-created on first scheduled post: `x`, `mastodon`, `linkedin`, `launch`, `reshare-2w`, `resurface-3mo`.
+
+### First-run safety
+
+The very first poll inserts every existing feed entry into a local state table with no Todoist tasks created. Only posts that appear after the first poll spawn the 9-task series. Clearing the `blog_posts_scheduled` table re-triggers the same backfill on the next run.
+
+### Run
+
+```bash
+./darek blog sync         # one-shot, cron-friendly
+```
+
+`darek serve` polls the feed every `sync_interval` (parallel to FreshRSS / Todoist).
+
+### Failure modes
+
+If any of the 9 task creations fails mid-series, already-created tasks are deleted (best-effort) and the post is **not** marked scheduled — next poll retries fresh. If the LLM call fails, the post is skipped for this poll and retried next time.
 
 ## FreshRSS
 
