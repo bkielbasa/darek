@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -55,5 +56,30 @@ func validate(c *Config) error {
 	if os.Getenv(c.Postgres.URLEnv) == "" {
 		return fmt.Errorf("env var %s (postgres.url_env) is empty", c.Postgres.URLEnv)
 	}
+
+	bm := c.BlogMarketing
+	if bm.FeedURL != "" || bm.ProjectName != "" || bm.PostTime != "" || bm.Timezone != "" || bm.SyncInterval != 0 {
+		if bm.FeedURL == "" {
+			return fmt.Errorf("blog_marketing.feed_url required")
+		}
+		if _, err := url.Parse(bm.FeedURL); err != nil {
+			return fmt.Errorf("blog_marketing.feed_url: %w", err)
+		}
+		if bm.ProjectName == "" {
+			return fmt.Errorf("blog_marketing.project_name required")
+		}
+		if bm.PostTime == "" {
+			return fmt.Errorf("blog_marketing.post_time required (HH:MM)")
+		}
+		if _, err := time.Parse("15:04", bm.PostTime); err != nil {
+			return fmt.Errorf("blog_marketing.post_time: expected HH:MM, got %q", bm.PostTime)
+		}
+		if bm.Timezone != "" {
+			if _, err := time.LoadLocation(bm.Timezone); err != nil {
+				return fmt.Errorf("blog_marketing.timezone: %w", err)
+			}
+		}
+	}
+
 	return nil
 }

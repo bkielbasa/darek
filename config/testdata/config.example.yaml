@@ -56,3 +56,10 @@ mail:
       username: me@example.com
       secret_env: DAREK_MAIL_PERSONAL
       sync_folders: [INBOX]
+
+blog_marketing:
+  feed_url: https://blog.example.com/feed.xml
+  project_name: Marketing
+  sync_interval: 15m       # 0 disables the in-server loop
+  post_time: "09:00"
+  timezone: Europe/Warsaw  # optional; default = system local

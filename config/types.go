@@ -18,6 +18,7 @@ type Config struct {
 	WhatsApp  WhatsApp      `yaml:"whatsapp"`
 
 	CalendarDigest CalendarDigest `yaml:"calendar_digest"`
+	BlogMarketing  BlogMarketing  `yaml:"blog_marketing"`
 }
 
 type CalendarDigest struct {
@@ -27,9 +28,9 @@ type CalendarDigest struct {
 }
 
 type OpenAI struct {
-	Model      string `yaml:"model"`
-	BaseURL    string `yaml:"base_url"`
-	APIKeyEnv  string `yaml:"api_key_env"`
+	Model     string `yaml:"model"`
+	BaseURL   string `yaml:"base_url"`
+	APIKeyEnv string `yaml:"api_key_env"`
 }
 
 type Postgres struct {
@@ -69,6 +70,14 @@ type FreshRSS struct {
 	SyncInterval time.Duration `yaml:"sync_interval"`
 }
 
+type BlogMarketing struct {
+	FeedURL      string        `yaml:"feed_url"`
+	ProjectName  string        `yaml:"project_name"`
+	SyncInterval time.Duration `yaml:"sync_interval"`
+	PostTime     string        `yaml:"post_time"` // "HH:MM"
+	Timezone     string        `yaml:"timezone"`  // optional; default = system local
+}
+
 type Server struct {
 	Bind string `yaml:"bind"` // e.g. 127.0.0.1:7777
 }
@@ -86,7 +95,7 @@ type WhatsApp struct {
 }
 
 type CalendarSrc struct {
-	Kind            string `yaml:"kind"`              // "google" | "ical"
+	Kind            string `yaml:"kind"` // "google" | "ical"
 	Nickname        string `yaml:"nickname"`
 	URL             string `yaml:"url"`               // for ical
 	CalendarID      string `yaml:"calendar_id"`       // for google, default "primary"
