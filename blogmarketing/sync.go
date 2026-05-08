@@ -56,7 +56,8 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 
 	start := time.Now()
 	res := &Result{}
-	defer func() { recordDuration(ctx, start, outcome(res)) }()
+	outcomeStr := "error"
+	defer func() { recordDuration(ctx, start, outcomeStr) }()
 
 	entries, err := feed.List(ctx)
 	if err != nil {
@@ -162,6 +163,7 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 		attribute.Int("skipped", res.Skipped),
 		attribute.Int("errors", len(res.Errors)),
 	)
+	outcomeStr = outcome(res)
 	return res, nil
 }
 
