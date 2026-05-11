@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"darek/exechistory"
 	"darek/links"
 	"darek/obs"
 	"darek/tools/freshrss"
@@ -50,6 +51,7 @@ type OnVideoIngestedFunc func(ctx context.Context, linkID uuid.UUID, url, title 
 // the run.
 func Sync(ctx context.Context, fr Lister, store *links.Store, onVideoIngested OnVideoIngestedFunc) (*Result, error) {
 	ctx, span := tracer.Start(ctx, "freshrssimport.sync")
+	exechistory.MarkExecution(span, "freshrss-sync")
 	defer span.End()
 
 	start := time.Now()

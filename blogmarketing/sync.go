@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"darek/exechistory"
 	"darek/obs"
 	"darek/tools/blogfeed"
 	"darek/tools/todoist"
@@ -52,6 +53,7 @@ type Result struct {
 // Sync polls the feed, schedules new posts, and returns aggregated counts.
 func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, td TodoistAPI, cfg Config) (*Result, error) {
 	ctx, span := tracer.Start(ctx, "blogmarketing.sync")
+	exechistory.MarkExecution(span, "blog-marketing-sync")
 	defer span.End()
 
 	start := time.Now()

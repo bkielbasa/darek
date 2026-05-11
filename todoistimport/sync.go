@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"darek/exechistory"
 	"darek/links"
 	"darek/obs"
 	"darek/tools/todoist"
@@ -80,6 +81,7 @@ func normalizeLabels(in []string) []string {
 // Tasks without URLs are left alone (not completed).
 func Sync(ctx context.Context, c Lister, store *links.Store, onVideoIngested OnVideoIngestedFunc) (*Result, error) {
 	ctx, span := tracer.Start(ctx, "todoistimport.sync")
+	exechistory.MarkExecution(span, "todoist-sync")
 	defer span.End()
 
 	start := time.Now()
