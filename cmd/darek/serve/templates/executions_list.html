@@ -1,0 +1,60 @@
+{{define "executions_list.html"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>executions · darek</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="app">
+  <a href="/" class="brand">darek</a>
+  <nav class="primary">
+    <a href="/">queue</a>
+    <a href="/all">archive</a>
+    <a href="/executions" class="active">executions</a>
+  </nav>
+</header>
+<main>
+  <h1>Executions</h1>
+
+  {{if .Disabled}}
+  <p>Execution history is disabled. Set <code>execution_history.enabled: true</code> in your config and restart <code>darek serve</code>.</p>
+  {{else}}
+  <form method="get" action="/executions" class="filter-bar">
+    <label>kind:
+      <select name="kind" onchange="this.form.submit()">
+        <option value="">— all —</option>
+        {{range .Kinds}}<option value="{{.}}" {{if eq . $.Kind}}selected{{end}}>{{.}}</option>{{end}}
+      </select>
+    </label>
+  </form>
+
+  <table class="executions">
+    <thead>
+      <tr><th>Started</th><th>Kind</th><th>Name</th><th>Duration</th><th>Status</th></tr>
+    </thead>
+    <tbody>
+      {{range .Rows}}
+      <tr class="{{if .IsError}}row-error{{end}}">
+        <td><a href="/executions/{{.ID}}">{{.StartedAt}}</a></td>
+        <td>{{.Kind}}</td>
+        <td>{{.Name}}</td>
+        <td>{{.DurationMS}} ms</td>
+        <td>{{.Status}}</td>
+      </tr>
+      {{else}}
+      <tr><td colspan="5">no executions yet</td></tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  {{if .NextBefore}}
+  <p><a href="/executions?before={{.NextBefore}}{{if .Kind}}&kind={{.Kind}}{{end}}">older →</a></p>
+  {{end}}
+  {{end}}
+</main>
+</body>
+</html>
+{{end}}

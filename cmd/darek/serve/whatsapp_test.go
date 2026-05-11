@@ -55,7 +55,7 @@ func (f *fakeWA) Unpair(ctx context.Context) error {
 
 func newTestServerWithWA(t *testing.T, wa *fakeWA) *Server {
 	t.Helper()
-	s, err := New(nil, nil, nil, newTestAuth(time.Hour), wa)
+	s, err := New(nil, nil, nil, newTestAuth(time.Hour), wa, nil, "")
 	require.NoError(t, err)
 	return s
 }
