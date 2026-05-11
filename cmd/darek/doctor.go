@@ -62,6 +62,11 @@ func runDoctor(ctx context.Context, cfgPath string) error {
 			if err == nil {
 				_, err = pool.Exec(ctx, "SELECT 1")
 				add("postgres query", err, "ok")
+				if cfg.ExecutionHistory.Enabled {
+					var n int
+					perr := pool.QueryRow(ctx, `SELECT COUNT(*) FROM executions WHERE started_at > now() - interval '1 day'`).Scan(&n)
+					add("executions_24h", perr, fmt.Sprintf("count=%d", n))
+				}
 				pool.Close()
 			}
 		}
