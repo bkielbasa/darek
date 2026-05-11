@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"darek/exechistory"
 	"darek/llm"
 	"darek/obs"
 	"darek/tools"
@@ -63,6 +64,7 @@ func (a *Agent) RunTurn(ctx context.Context, userInput string) (*TurnResult, err
 	ctx, span := a.tracer.Start(ctx, "darek.turn",
 		trace.WithAttributes(attribute.Int("user_input_chars", len(userInput))),
 	)
+	exechistory.MarkExecution(span, "chat-turn")
 	defer span.End()
 	start := time.Now()
 	outcome := "ok"
