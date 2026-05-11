@@ -9,10 +9,14 @@ import (
 	"darek/blogmarketing"
 	"darek/config"
 	"darek/db"
+	"darek/exechistory"
 	"darek/llm"
 	"darek/obs"
 	"darek/tools/blogfeed"
 	"darek/tools/todoist"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 func runBlog(ctx context.Context, cfgPath string, args []string) error {
@@ -27,7 +31,7 @@ func runBlog(ctx context.Context, cfgPath string, args []string) error {
 	}
 }
 
-func runBlogSync(ctx context.Context, cfgPath string) error {
+func runBlogSync(ctx context.Context, cfgPath string) (retErr error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return err
@@ -48,6 +52,16 @@ func runBlogSync(ctx context.Context, cfgPath string) error {
 		return fmt.Errorf("otel init: %w", err)
 	}
 	defer func() { _ = otelShutdown(context.Background()) }()
+
+	ctx, span := otel.Tracer("darek/cli").Start(ctx, "cli.blog.sync")
+	exechistory.MarkExecution(span, "cli-blog-sync")
+	defer func() {
+		if retErr != nil {
+			span.RecordError(retErr)
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
 
 	pool, err := db.Open(ctx, dsn)
 	if err != nil {

@@ -7,10 +7,14 @@ import (
 
 	"darek/config"
 	"darek/db"
+	"darek/exechistory"
 	"darek/links"
 	"darek/obs"
 	"darek/todoistimport"
 	"darek/tools/todoist"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // runTodoist dispatches `darek todoist <subcmd>`.
@@ -26,7 +30,7 @@ func runTodoist(ctx context.Context, cfgPath string, args []string) error {
 	}
 }
 
-func runTodoistSync(ctx context.Context, cfgPath string) error {
+func runTodoistSync(ctx context.Context, cfgPath string) (retErr error) {
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return err
@@ -49,6 +53,16 @@ func runTodoistSync(ctx context.Context, cfgPath string) error {
 		return fmt.Errorf("otel init: %w", err)
 	}
 	defer func() { _ = otelShutdown(context.Background()) }()
+
+	ctx, span := otel.Tracer("darek/cli").Start(ctx, "cli.todoist.sync")
+	exechistory.MarkExecution(span, "cli-todoist-sync")
+	defer func() {
+		if retErr != nil {
+			span.RecordError(retErr)
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
 
 	pool, err := db.Open(ctx, dsn)
 	if err != nil {
