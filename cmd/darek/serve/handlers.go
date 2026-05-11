@@ -9,11 +9,14 @@ import (
 	"time"
 
 	"darek/analyze"
+	"darek/exechistory"
 	"darek/links"
 	"darek/obs"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -324,8 +327,14 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "sync not configured", http.StatusNotImplemented)
 		return
 	}
-	msg, err := s.sync(r.Context())
+	ctx, span := otel.Tracer("darek/serve").Start(r.Context(), "serve.manual-sync")
+	exechistory.MarkExecution(span, "manual-sync")
+	defer span.End()
+
+	msg, err := s.sync(ctx)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		fmt.Fprintf(w, "sync failed: %v", err)
 		return
 	}
@@ -388,18 +397,26 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "analyze not configured", http.StatusNotImplemented)
 		return
 	}
-	cur, err := s.fetchOne(r.Context(), id)
+	ctx, span := otel.Tracer("darek/serve").Start(r.Context(), "serve.link-analyze")
+	exechistory.MarkExecution(span, "link-analyze")
+	defer span.End()
+
+	cur, err := s.fetchOne(ctx, id)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	out, err := s.analyze.Analyze(r.Context(), analyze.Input{
+	out, err := s.analyze.Analyze(ctx, analyze.Input{
 		Title: cur.Title, URL: cur.URL, Body: cur.Summary,
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		if m, _ := obs.MetricsInstance(); m != nil {
-			m.LinksAnalyze.Add(r.Context(), 1, metric.WithAttributes(
+			m.LinksAnalyze.Add(ctx, 1, metric.WithAttributes(
 				attribute.String("outcome", "error"),
 				attribute.String("trigger", "manual"),
 			))
@@ -410,19 +427,23 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.ApplyAnalysis(r.Context(), id, out.Summary, out.Tags); err != nil {
+	if err := s.store.ApplyAnalysis(ctx, id, out.Summary, out.Tags); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if m, _ := obs.MetricsInstance(); m != nil {
-		m.LinksAnalyze.Add(r.Context(), 1, metric.WithAttributes(
+		m.LinksAnalyze.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("outcome", "ok"),
 			attribute.String("trigger", "manual"),
 		))
 	}
 
-	cur, err = s.fetchOne(r.Context(), id)
+	cur, err = s.fetchOne(ctx, id)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
