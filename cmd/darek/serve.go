@@ -8,10 +8,13 @@ import (
 	"os"
 	"time"
 
+	"log/slog"
+
 	"darek/blogmarketing"
 	"darek/cmd/darek/serve"
 	"darek/config"
 	"darek/db"
+	"darek/exechistory"
 	"darek/freshrssimport"
 	"darek/links"
 	"darek/llm"
@@ -40,7 +43,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 		return err
 	}
 
-	_, otelShutdown, err := obs.Init(ctx, obs.Options{
+	otelSetup, otelShutdown, err := obs.Init(ctx, obs.Options{
 		ServiceName: cfg.OTEL.ServiceName,
 		Endpoint:    cfg.OTEL.ExporterEndpoint,
 		Insecure:    cfg.OTEL.Insecure,
@@ -58,6 +61,13 @@ func runServe(ctx context.Context, cfgPath string) error {
 
 	if err := obs.RegisterPoolGauges(pool); err != nil {
 		fmt.Fprintf(os.Stderr, "warn: register pool gauges: %v\n", err)
+	}
+
+	var execStore *exechistory.Store
+	if cfg.ExecutionHistory.Enabled {
+		rec := exechistory.NewRecorder(pool, slog.Default())
+		otelSetup.TracerProvider.RegisterSpanProcessor(rec)
+		execStore = exechistory.NewStore(pool)
 	}
 
 	store := links.NewStore(pool)
@@ -202,7 +212,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 		return err
 	}
 
-	srv, err := serve.New(store, sync, analyzer, authCfg, waManager)
+	srv, err := serve.New(store, sync, analyzer, authCfg, waManager, execStore, cfg.OTEL.JaegerUIURL)
 	if err != nil {
 		return err
 	}
@@ -216,6 +226,10 @@ func runServe(ctx context.Context, cfgPath string) error {
 	}
 	if blogSync != nil && cfg.BlogMarketing.SyncInterval > 0 {
 		go runSyncLoop(ctx, blogSync, cfg.BlogMarketing.SyncInterval, "blog")
+	}
+
+	if cfg.ExecutionHistory.Enabled {
+		go exechistory.RunCleanup(ctx, pool, cfg.ExecutionHistory, slog.Default())
 	}
 
 	fmt.Fprintf(os.Stderr, "darek serve listening on %s\n", cfg.Server.Bind)
