@@ -38,6 +38,14 @@ func applyDefaults(c *Config) {
 	if c.OTEL.ServiceName == "" {
 		c.OTEL.ServiceName = "darek"
 	}
+	if c.ExecutionHistory.Enabled {
+		if c.ExecutionHistory.Retention == 0 {
+			c.ExecutionHistory.Retention = 720 * time.Hour
+		}
+		if c.ExecutionHistory.CleanupPeriod == 0 {
+			c.ExecutionHistory.CleanupPeriod = 24 * time.Hour
+		}
+	}
 }
 
 func validate(c *Config) error {
@@ -78,6 +86,15 @@ func validate(c *Config) error {
 			if _, err := time.LoadLocation(bm.Timezone); err != nil {
 				return fmt.Errorf("blog_marketing.timezone: %w", err)
 			}
+		}
+	}
+
+	if c.ExecutionHistory.Enabled {
+		if c.ExecutionHistory.Retention <= 0 {
+			return fmt.Errorf("execution_history.retention must be > 0 when enabled")
+		}
+		if c.ExecutionHistory.CleanupPeriod <= 0 {
+			return fmt.Errorf("execution_history.cleanup_period must be > 0 when enabled")
 		}
 	}
 

@@ -100,3 +100,67 @@ blog_marketing:
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "timezone")
 }
+
+func writeTempConfig(t *testing.T, body string) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "darek-*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(body); err != nil {
+		t.Fatal(err)
+	}
+	_ = f.Close()
+	return f.Name()
+}
+
+func TestExecutionHistoryDefaults(t *testing.T) {
+	t.Setenv("OAI", "x")
+	t.Setenv("PG", "postgres://x")
+	path := writeTempConfig(t, `
+openai: {model: m, api_key_env: OAI}
+postgres: {url_env: PG}
+execution_history: {enabled: true}
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ExecutionHistory.Retention != 720*time.Hour {
+		t.Errorf("retention default: got %v want 720h", cfg.ExecutionHistory.Retention)
+	}
+	if cfg.ExecutionHistory.CleanupPeriod != 24*time.Hour {
+		t.Errorf("cleanup_period default: got %v want 24h", cfg.ExecutionHistory.CleanupPeriod)
+	}
+}
+
+func TestExecutionHistoryDisabledByDefault(t *testing.T) {
+	t.Setenv("OAI", "x")
+	t.Setenv("PG", "postgres://x")
+	path := writeTempConfig(t, `
+openai: {model: m, api_key_env: OAI}
+postgres: {url_env: PG}
+`)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ExecutionHistory.Enabled {
+		t.Error("enabled should default to false")
+	}
+}
+
+func TestExecutionHistoryValidation_RetentionMustBePositive(t *testing.T) {
+	t.Setenv("OAI", "x")
+	t.Setenv("PG", "postgres://x")
+	path := writeTempConfig(t, `
+openai: {model: m, api_key_env: OAI}
+postgres: {url_env: PG}
+execution_history:
+  enabled: true
+  retention: -1h
+`)
+	if _, err := Load(path); err == nil {
+		t.Fatal("expected error for negative retention")
+	}
+}

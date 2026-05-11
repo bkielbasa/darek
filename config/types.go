@@ -17,8 +17,9 @@ type Config struct {
 	Auth      Auth          `yaml:"auth"`
 	WhatsApp  WhatsApp      `yaml:"whatsapp"`
 
-	CalendarDigest CalendarDigest `yaml:"calendar_digest"`
-	BlogMarketing  BlogMarketing  `yaml:"blog_marketing"`
+	CalendarDigest   CalendarDigest   `yaml:"calendar_digest"`
+	BlogMarketing    BlogMarketing    `yaml:"blog_marketing"`
+	ExecutionHistory ExecutionHistory `yaml:"execution_history"`
 }
 
 type CalendarDigest struct {
@@ -41,6 +42,7 @@ type OTEL struct {
 	ServiceName      string `yaml:"service_name"`
 	ExporterEndpoint string `yaml:"exporter_endpoint"`
 	Insecure         bool   `yaml:"insecure"`
+	JaegerUIURL      string `yaml:"jaeger_ui_url"`
 }
 
 type Agent struct {
@@ -129,4 +131,10 @@ type MailAccountCfg struct {
 	Username    string   `yaml:"username"`
 	SecretEnv   string   `yaml:"secret_env"`
 	SyncFolders []string `yaml:"sync_folders"`
+}
+
+type ExecutionHistory struct {
+	Enabled       bool          `yaml:"enabled"`
+	Retention     time.Duration `yaml:"retention"`
+	CleanupPeriod time.Duration `yaml:"cleanup_period"`
 }
