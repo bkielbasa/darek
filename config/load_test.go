@@ -104,12 +104,9 @@ blog_marketing:
 func writeTempConfig(t *testing.T, body string) string {
 	t.Helper()
 	f, err := os.CreateTemp(t.TempDir(), "darek-*.yaml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := f.WriteString(body); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
+	_, err = f.WriteString(body)
+	require.NoError(t, err)
 	_ = f.Close()
 	return f.Name()
 }
@@ -123,15 +120,9 @@ postgres: {url_env: PG}
 execution_history: {enabled: true}
 `)
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.ExecutionHistory.Retention != 720*time.Hour {
-		t.Errorf("retention default: got %v want 720h", cfg.ExecutionHistory.Retention)
-	}
-	if cfg.ExecutionHistory.CleanupPeriod != 24*time.Hour {
-		t.Errorf("cleanup_period default: got %v want 24h", cfg.ExecutionHistory.CleanupPeriod)
-	}
+	require.NoError(t, err)
+	require.Equal(t, 720*time.Hour, cfg.ExecutionHistory.Retention)
+	require.Equal(t, 24*time.Hour, cfg.ExecutionHistory.CleanupPeriod)
 }
 
 func TestExecutionHistoryDisabledByDefault(t *testing.T) {
@@ -142,12 +133,8 @@ openai: {model: m, api_key_env: OAI}
 postgres: {url_env: PG}
 `)
 	cfg, err := Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cfg.ExecutionHistory.Enabled {
-		t.Error("enabled should default to false")
-	}
+	require.NoError(t, err)
+	require.False(t, cfg.ExecutionHistory.Enabled)
 }
 
 func TestExecutionHistoryValidation_RetentionMustBePositive(t *testing.T) {
@@ -160,7 +147,6 @@ execution_history:
   enabled: true
   retention: -1h
 `)
-	if _, err := Load(path); err == nil {
-		t.Fatal("expected error for negative retention")
-	}
+	_, err := Load(path)
+	require.Error(t, err)
 }
