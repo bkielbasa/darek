@@ -52,3 +52,26 @@ func TestKindColor_UnknownPrefixIsStableViaHash(t *testing.T) {
 		t.Error("expected non-empty color for unknown")
 	}
 }
+
+func TestFormatMS(t *testing.T) {
+	tests := []struct {
+		ms   int64
+		want string
+	}{
+		{0, "0ms"},
+		{1, "1ms"},
+		{999, "999ms"},
+		{1000, "1.0s"},
+		{1500, "1.5s"},
+		{59999, "60.0s"},
+		{60000, "1m 0s"},
+		{61000, "1m 1s"},
+		{90000, "1m 30s"},
+		{3600000, "60m 0s"},
+	}
+	for _, tc := range tests {
+		if got := formatMS(tc.ms); got != tc.want {
+			t.Errorf("formatMS(%d) = %q, want %q", tc.ms, got, tc.want)
+		}
+	}
+}

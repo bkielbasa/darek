@@ -256,3 +256,17 @@ func kindColor(name string) string {
 	_, _ = h.Write([]byte(key))
 	return kindPalette[h.Sum32()%uint32(len(kindPalette))]
 }
+
+// formatMS renders a millisecond duration in human-friendly units.
+// Used for axis tick labels on the waterfall.
+func formatMS(ms int64) string {
+	if ms < 1000 {
+		return fmt.Sprintf("%dms", ms)
+	}
+	if ms < 60000 {
+		return fmt.Sprintf("%.1fs", float64(ms)/1000)
+	}
+	minutes := ms / 60000
+	seconds := (ms % 60000) / 1000
+	return fmt.Sprintf("%dm %ds", minutes, seconds)
+}
