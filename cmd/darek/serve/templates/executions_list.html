@@ -25,7 +25,12 @@
       <td><a href="/executions/{{.ID}}">{{.StartedAt}}</a></td>
       <td>{{.Kind}}</td>
       <td>{{.Name}}</td>
-      <td>{{.DurationMS}} ms</td>
+      <td class="exec-dur">
+        <svg class="exec-mini" viewBox="0 0 1000 6" preserveAspectRatio="none" aria-hidden="true">
+          <rect x="0" y="0" width="{{.WidthPct}}" height="6" fill="{{.Color}}" rx="1" ry="1"/>
+        </svg>
+        <span>{{.DurationMS}} ms</span>
+      </td>
       <td>{{.Status}}</td>
     </tr>
     {{else}}

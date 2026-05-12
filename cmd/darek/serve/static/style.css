@@ -834,3 +834,18 @@ button.danger:hover {
 .wf-row-error > summary .wf-name { color: #c25450; }
 
 .wf-empty { color: var(--text-dim); font-style: italic; margin: 1rem 0; }
+
+/* executions — list mini-bar */
+.exec-dur {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.exec-mini {
+  display: inline-block;
+  width: 80px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+  background: #f4f0e6;
+  border-radius: 1px;
+}
