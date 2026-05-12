@@ -734,3 +734,21 @@ button.danger:hover {
   border-bottom: 2px solid var(--bg);
   transform: rotate(-45deg) translate(1px, -1px);
 }
+
+.app-footer {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #e5e5e5;
+  margin-top: 2rem;
+  font-size: 0.85em;
+  color: #666;
+}
+.app-footer .brand {
+  font-weight: 600;
+  color: #333;
+}
+.app-footer .muted {
+  color: #888;
+}

@@ -45,6 +45,7 @@ type ratingBtn struct {
 
 // indexVM is the view-model for the list page.
 type indexVM struct {
+	Page      Page
 	PageTitle string
 	Path      string
 	Query     listQuery
@@ -152,7 +153,7 @@ func (s *Server) handleRating(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cur.Rating = ratingPtr
-	if err := s.tmpl.ExecuteTemplate(w, "_rating.html", toLinkVM(cur, s.analyze != nil)); err != nil {
+	if err := s.renderPartial(w, "_rating.html", toLinkVM(cur, s.analyze != nil)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -196,11 +197,14 @@ func (s *Server) handleList(queueOnly bool) http.HandlerFunc {
 		}
 		title := "queue"
 		path := "/"
+		activeKey := "queue"
 		if !queueOnly {
 			title = "archive"
 			path = "/all"
+			activeKey = "archive"
 		}
 		vm := indexVM{
+			Page:      s.page(activeKey, "darek — "+title),
 			PageTitle: title,
 			Path:      path,
 			Query:     q,
@@ -208,7 +212,7 @@ func (s *Server) handleList(queueOnly bool) http.HandlerFunc {
 			Ratings:   []int{1, 2, 3, 4, 5},
 			Links:     rows,
 		}
-		if err := s.tmpl.ExecuteTemplate(w, "index.html", vm); err != nil {
+		if err := s.render(w, "index.html", vm); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 	}
@@ -256,7 +260,7 @@ func (s *Server) handleTags(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "_tags.html", toLinkVM(cur, s.analyze != nil)); err != nil {
+	if err := s.renderPartial(w, "_tags.html", toLinkVM(cur, s.analyze != nil)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -286,7 +290,7 @@ func (s *Server) handleNotes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "_notes.html", toLinkVM(cur, s.analyze != nil)); err != nil {
+	if err := s.renderPartial(w, "_notes.html", toLinkVM(cur, s.analyze != nil)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -388,7 +392,7 @@ func (s *Server) handleKind(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "_kind.html", toLinkVM(cur, s.analyze != nil)); err != nil {
+	if err := s.renderPartial(w, "_kind.html", toLinkVM(cur, s.analyze != nil)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -429,7 +433,7 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		}
 		// Render the row with an inline error in the summary slot.
 		cur.Summary = fmt.Sprintf("analysis failed: %v", err)
-		_ = s.tmpl.ExecuteTemplate(w, "_row.html", toLinkVM(cur, true))
+		_ = s.renderPartial(w, "_row.html", toLinkVM(cur, true))
 		return
 	}
 
@@ -453,7 +457,7 @@ func (s *Server) handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "_row.html", toLinkVM(cur, true)); err != nil {
+	if err := s.renderPartial(w, "_row.html", toLinkVM(cur, true)); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

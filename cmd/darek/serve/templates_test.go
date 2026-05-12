@@ -1,7 +1,9 @@
 package serve
 
 import (
+	"net/http/httptest"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -65,5 +67,37 @@ func TestParseTemplateBundle(t *testing.T) {
 
 	if b.loginTmpl.Lookup("login.html") == nil {
 		t.Error("loginTmpl missing login.html template")
+	}
+}
+
+func TestIndexRendersWithChrome(t *testing.T) {
+	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, nil, nil, "")
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	rec := httptest.NewRecorder()
+	vm := indexVM{
+		Page:      s.page("queue", "darek — queue"),
+		PageTitle: "queue",
+		Path:      "/",
+		Kinds:     []string{"article"},
+		Ratings:   []int{1, 2, 3, 4, 5},
+	}
+	if err := s.render(rec, "index.html", vm); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`<footer class="app-footer">`,
+		`class="brand">darek`,
+		`href="/all"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q\n--- body ---\n%s", want, body)
+		}
+	}
+	if !strings.Contains(body, `href="/" class="active"`) {
+		t.Errorf("active nav not marked; body:\n%s", body)
 	}
 }

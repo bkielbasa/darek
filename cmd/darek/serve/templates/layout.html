@@ -12,8 +12,8 @@
 <header class="app">
   <a href="/" class="brand">darek</a>
   <nav class="primary">
-    <a href="/" {{if eq .PageTitle "queue"}}class="active"{{end}}>queue</a>
-    <a href="/all" {{if eq .PageTitle "archive"}}class="active"{{end}}>archive</a>
+    {{range .Page.Nav}}<a href="{{.Path}}"{{if eq .Key $.Page.ActiveKey}} class="active"{{end}}>{{.Label}}</a>
+    {{end}}
   </nav>
   <span class="spacer"></span>
   <div id="sync-banner"></div>
@@ -24,6 +24,11 @@
 <main>
   {{block "content" .}}{{end}}
 </main>
+<footer class="app-footer">
+  <span class="brand">{{.Page.Footer.Brand}}</span>
+  <span class="muted">v{{.Page.Footer.Version}}</span>
+  <span class="muted">last sync: {{.Page.Footer.LastSync}}</span>
+</footer>
 </body>
 </html>
 {{end}}
