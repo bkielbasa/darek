@@ -101,3 +101,30 @@ func TestIndexRendersWithChrome(t *testing.T) {
 		t.Errorf("active nav not marked; body:\n%s", body)
 	}
 }
+
+func TestExecutionsListRendersWithChrome(t *testing.T) {
+	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, nil, nil, "")
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	vm := executionsListVM{
+		Page:     s.page("executions", "executions · darek"),
+		Disabled: true,
+	}
+	rec := httptest.NewRecorder()
+	if err := s.render(rec, "executions_list.html", vm); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`<footer class="app-footer">`,
+		`href="/all"`,
+		`Execution history is disabled`,
+		`<title>executions · darek</title>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+}

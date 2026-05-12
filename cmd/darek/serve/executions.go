@@ -24,7 +24,7 @@ type executionRowVM struct {
 }
 
 type executionsListVM struct {
-	PageTitle  string
+	Page       Page
 	Kinds      []string
 	Kind       string
 	Rows       []executionRowVM
@@ -57,8 +57,9 @@ type executionDetailVM struct {
 
 func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
 	if s.executions == nil {
-		_ = s.tmpl.ExecuteTemplate(w, "executions_list.html", executionsListVM{
-			PageTitle: "executions", Disabled: true,
+		_ = s.render(w, "executions_list.html", executionsListVM{
+			Page:     s.page("executions", "executions · darek"),
+			Disabled: true,
 		})
 		return
 	}
@@ -85,10 +86,10 @@ func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vm := executionsListVM{
-		PageTitle: "executions",
-		Kinds:     kinds,
-		Kind:      f.Kind,
-		Rows:      make([]executionRowVM, 0, len(rows)),
+		Page:  s.page("executions", "executions · darek"),
+		Kinds: kinds,
+		Kind:  f.Kind,
+		Rows:  make([]executionRowVM, 0, len(rows)),
 	}
 	for _, e := range rows {
 		vm.Rows = append(vm.Rows, executionRowVM{
@@ -104,7 +105,7 @@ func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
 	if len(rows) == f.Limit {
 		vm.NextBefore = rows[len(rows)-1].StartedAt.Format(time.RFC3339Nano)
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "executions_list.html", vm); err != nil {
+	if err := s.render(w, "executions_list.html", vm); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
