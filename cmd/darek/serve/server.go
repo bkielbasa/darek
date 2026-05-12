@@ -49,6 +49,10 @@ type Server struct {
 	enabledNavItems []NavItem
 	version         string
 	lastSync        lastSyncCache
+
+	pageSets  map[string]*template.Template
+	partials  *template.Template
+	loginTmpl *template.Template
 }
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
@@ -58,7 +62,24 @@ func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, wa
 	if err != nil {
 		return nil, err
 	}
-	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync, analyze: analyzer, auth: auth, whatsApp: wa, executions: exec, jaegerURL: jaegerURL}
+	b, err := parseTemplateBundle()
+	if err != nil {
+		return nil, err
+	}
+	s := &Server{
+		store:      store,
+		tmpl:       t,
+		mux:        http.NewServeMux(),
+		sync:       sync,
+		analyze:    analyzer,
+		auth:       auth,
+		whatsApp:   wa,
+		executions: exec,
+		jaegerURL:  jaegerURL,
+		pageSets:   b.pageSets,
+		partials:   b.partials,
+		loginTmpl:  b.loginTmpl,
+	}
 	s.enabledNavItems = filterNavItems(navItems, s)
 	s.version = buildVersion()
 	s.routes()
@@ -128,4 +149,22 @@ func (s *Server) Run(ctx context.Context, bind string) error {
 	case err := <-errCh:
 		return fmt.Errorf("listen: %w", err)
 	}
+}
+
+// render writes a full-page response by executing the page's template set
+// against the layout block. page must be the file basename (e.g.
+// "index.html"). vm is the page's view-model; it MUST carry the chrome data
+// (typically via a Page field populated by s.page(...)).
+func (s *Server) render(w http.ResponseWriter, page string, vm any) error {
+	t, ok := s.pageSets[page]
+	if !ok {
+		return fmt.Errorf("render: unknown page %q", page)
+	}
+	return t.ExecuteTemplate(w, "layout", vm)
+}
+
+// renderPartial writes a fragment response (used by HTMX swaps). name must
+// be the partial's defined name, e.g. "_row.html".
+func (s *Server) renderPartial(w http.ResponseWriter, name string, vm any) error {
+	return s.partials.ExecuteTemplate(w, name, vm)
 }
