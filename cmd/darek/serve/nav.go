@@ -67,9 +67,3 @@ func (s *Server) page(activeKey, title string) Page {
 		Footer:    s.footerInfo(),
 	}
 }
-
-// Temporary stub — replaced in Task 4. Lets the package compile while
-// nav-only changes land.
-func (s *Server) footerInfo() FooterInfo {
-	return FooterInfo{Brand: "darek", Version: "dev", LastSync: "—"}
-}

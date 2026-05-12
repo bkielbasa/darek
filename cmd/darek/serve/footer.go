@@ -1,6 +1,13 @@
 package serve
 
-import "runtime/debug"
+import (
+	"context"
+	"runtime/debug"
+	"sync"
+	"time"
+
+	"darek/exechistory"
+)
 
 // pickVersion picks a human-friendly version string from build info.
 // Prefers info.Main.Version (when set and not "(devel)"), then the first 7
@@ -27,4 +34,85 @@ func pickVersion(info *debug.BuildInfo) string {
 func buildVersion() string {
 	info, _ := debug.ReadBuildInfo()
 	return pickVersion(info)
+}
+
+// lastSyncLister is the slice of exechistory.Store the footer uses.
+// Defined as an interface so tests can substitute a fake.
+type lastSyncLister interface {
+	List(ctx context.Context, f exechistory.ListFilter) ([]exechistory.Execution, error)
+}
+
+const lastSyncTTL = 30 * time.Second
+
+// lastSyncCache memoises the formatted "last sync" string for lastSyncTTL.
+// Zero value is ready to use.
+type lastSyncCache struct {
+	mu      sync.Mutex
+	fetched time.Time // wall-clock time of the last successful fetch
+	value   string    // already-formatted relative string, "—" if unknown
+}
+
+// string returns the cached value, refreshing from lister if the entry is
+// stale. nil lister always returns "—".
+func (c *lastSyncCache) string(lister lastSyncLister, now time.Time) string {
+	return c.stringWithClock(lister, now, now)
+}
+
+// stringWithClock is the testable form: the caller passes both "now" and
+// "wall" so tests can advance time without sleeping. now is used for relTime
+// formatting; wall is the timestamp recorded for TTL accounting.
+func (c *lastSyncCache) stringWithClock(lister lastSyncLister, now, wall time.Time) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.fetched.IsZero() && wall.Sub(c.fetched) < lastSyncTTL {
+		return c.value
+	}
+	if lister == nil {
+		c.fetched = wall
+		c.value = "—"
+		return c.value
+	}
+
+	var newest time.Time
+	ok := false
+	for _, kind := range []string{"sync", "manual-sync"} {
+		rows, err := lister.List(context.Background(), exechistory.ListFilter{Kind: kind, Limit: 1})
+		if err != nil {
+			// DB error: keep last-good value, do not advance fetched (so the
+			// next render retries instead of waiting out the TTL). If we
+			// never had a good value, fall back to "—" to keep the footer
+			// from rendering empty.
+			if c.value == "" {
+				return "—"
+			}
+			return c.value
+		}
+		if len(rows) > 0 && rows[0].StartedAt.After(newest) {
+			newest = rows[0].StartedAt
+			ok = true
+		}
+	}
+
+	val := "—"
+	if ok {
+		val = relTimeAt(newest, now)
+	}
+	c.fetched = wall
+	c.value = val
+	return val
+}
+
+// footerInfo returns the FooterInfo for a render. version is the cached
+// value computed at startup; lastSync is refreshed on a 30-second TTL.
+func (s *Server) footerInfo() FooterInfo {
+	var lister lastSyncLister
+	if s.executions != nil {
+		lister = s.executions
+	}
+	return FooterInfo{
+		Brand:    "darek",
+		Version:  s.version,
+		LastSync: s.lastSync.string(lister, time.Now()),
+	}
 }

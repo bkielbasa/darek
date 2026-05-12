@@ -102,7 +102,13 @@ func toLinkVM(l links.Link, analyzeEnabled bool) linkVM {
 }
 
 func relTime(t time.Time) string {
-	d := time.Since(t)
+	return relTimeAt(t, time.Now())
+}
+
+// relTimeAt formats t as a relative duration from now. Split out so tests
+// can pin "now".
+func relTimeAt(t, now time.Time) string {
+	d := now.Sub(t)
 	switch {
 	case d < time.Minute:
 		return "just now"

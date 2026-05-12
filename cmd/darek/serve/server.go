@@ -47,6 +47,8 @@ type Server struct {
 	jaegerURL  string
 
 	enabledNavItems []NavItem
+	version         string
+	lastSync        lastSyncCache
 }
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
@@ -58,6 +60,7 @@ func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, wa
 	}
 	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync, analyze: analyzer, auth: auth, whatsApp: wa, executions: exec, jaegerURL: jaegerURL}
 	s.enabledNavItems = filterNavItems(navItems, s)
+	s.version = buildVersion()
 	s.routes()
 	return s, nil
 }
