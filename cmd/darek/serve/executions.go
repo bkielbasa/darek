@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"darek/exechistory"
@@ -204,4 +206,53 @@ func jsonString(v any) string {
 		return ""
 	}
 	return string(b)
+}
+
+// kindPalette is the fixed list of pastel hexes used for step/row coloring.
+// Eight entries — enough for the common known kinds plus a stable fallback
+// for unknown ones via FNV-modulo.
+var kindPalette = []string{
+	"#5f8fa3", // 0 muted teal
+	"#a37a5f", // 1 warm tan
+	"#7a8c5f", // 2 muted olive
+	"#a3805f", // 3 sandstone
+	"#7a5fa3", // 4 muted violet
+	"#5f9a8c", // 5 sage
+	"#a35f8f", // 6 dusty rose
+	"#8c8c5f", // 7 muted khaki
+}
+
+// knownKinds maps the most common name prefixes to fixed palette indices.
+// Adding a new kind here is a one-line change. Aliases (openai → 3, llm → 3)
+// keep semantically similar things visually grouped.
+var knownKinds = map[string]int{
+	"todoist":  0,
+	"freshrss": 1,
+	"imap":     2,
+	"mail":     2,
+	"openai":   3,
+	"llm":      3,
+	"http":     4,
+	"darek":    5,
+	"serve":    5,
+	"calendar": 6,
+	"chat":     7,
+}
+
+// kindColor returns a stable hex string for a step or execution name.
+// The key is the part before the first "." (so "todoist.fetch" → "todoist").
+// Names without a dot use the whole string as the key (so "sync" → "sync").
+// Known keys hit a fixed palette index; unknown keys hash to a stable
+// fallback so the same input always produces the same color.
+func kindColor(name string) string {
+	key := name
+	if i := strings.Index(name, "."); i >= 0 {
+		key = name[:i]
+	}
+	if idx, ok := knownKinds[key]; ok {
+		return kindPalette[idx]
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(key))
+	return kindPalette[h.Sum32()%uint32(len(kindPalette))]
 }
