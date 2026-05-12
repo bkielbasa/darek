@@ -36,7 +36,7 @@ func buildVersion() string {
 	return pickVersion(info)
 }
 
-// lastSyncLister is the slice of exechistory.Store the footer uses.
+// lastSyncLister is the subset of *exechistory.Store the footer uses.
 // Defined as an interface so tests can substitute a fake.
 type lastSyncLister interface {
 	List(ctx context.Context, f exechistory.ListFilter) ([]exechistory.Execution, error)
@@ -49,7 +49,7 @@ const lastSyncTTL = 30 * time.Second
 type lastSyncCache struct {
 	mu      sync.Mutex
 	fetched time.Time // wall-clock time of the last successful fetch
-	value   string    // already-formatted relative string, "—" if unknown
+	value   string    // formatted relative string; "" when no fetch has succeeded yet
 }
 
 // string returns the cached value, refreshing from lister if the entry is
@@ -74,15 +74,22 @@ func (c *lastSyncCache) stringWithClock(lister lastSyncLister, now, wall time.Ti
 		return c.value
 	}
 
+	// We hold c.mu across the DB call. lastSyncTTL bounds the refresh rate,
+	// and the per-call timeout below bounds any single render's wait — so
+	// in the worst case a render stalls 2s, not until a hung query returns.
+	// For darek's single-user workload this is fine; if concurrency grows,
+	// move the I/O out of the critical section with a single-flight pattern.
 	var newest time.Time
 	ok := false
 	for _, kind := range []string{"sync", "manual-sync"} {
-		rows, err := lister.List(context.Background(), exechistory.ListFilter{Kind: kind, Limit: 1})
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		rows, err := lister.List(ctx, exechistory.ListFilter{Kind: kind, Limit: 1})
+		cancel()
 		if err != nil {
-			// DB error: keep last-good value, do not advance fetched (so the
-			// next render retries instead of waiting out the TTL). If we
-			// never had a good value, fall back to "—" to keep the footer
-			// from rendering empty.
+			// DB error on any kind aborts the whole refresh. Keep the
+			// last-good value and do NOT advance c.fetched so the next
+			// render retries instead of waiting out the TTL. If we never
+			// had a good value, surface "—" so the footer isn't blank.
 			if c.value == "" {
 				return "—"
 			}

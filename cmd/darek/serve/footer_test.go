@@ -135,7 +135,7 @@ func TestLastSyncCache_DBErrorKeepsLastGoodValue(t *testing.T) {
 	}
 
 	lister.err = errors.New("db down")
-	got = c.stringWithClock(lister, now, now.Add(60*time.Second))
+	got = c.stringWithClock(lister, now, now.Add(lastSyncTTL+time.Second))
 	if got != "1m ago" {
 		t.Errorf("error path: got %q, want last-good \"1m ago\"", got)
 	}
