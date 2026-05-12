@@ -31,6 +31,14 @@ func TestParseTemplateBundle(t *testing.T) {
 		}
 	}
 
+	wantPartials := []string{
+		"_kind.html",
+		"_notes.html",
+		"_rating.html",
+		"_row.html",
+		"_tags.html",
+		"_whatsapp_group_row.html",
+	}
 	for name, set := range b.pageSets {
 		if set.Lookup("layout") == nil {
 			t.Errorf("page %s: missing layout block", name)
@@ -38,8 +46,10 @@ func TestParseTemplateBundle(t *testing.T) {
 		if set.Lookup(name) == nil {
 			t.Errorf("page %s: missing self-named template", name)
 		}
-		if set.Lookup("_row.html") == nil {
-			t.Errorf("page %s: missing _row.html partial", name)
+		for _, p := range wantPartials {
+			if set.Lookup(p) == nil {
+				t.Errorf("page %s: missing partial %s", name, p)
+			}
 		}
 	}
 
@@ -53,7 +63,7 @@ func TestParseTemplateBundle(t *testing.T) {
 		t.Error("partials should NOT include layout")
 	}
 
-	if b.loginTmpl == nil {
-		t.Fatal("loginTmpl is nil")
+	if b.loginTmpl.Lookup("login.html") == nil {
+		t.Error("loginTmpl missing login.html template")
 	}
 }
