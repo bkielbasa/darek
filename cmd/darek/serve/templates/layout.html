@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{{block "title" .}}darek{{end}}</title>
+<title>{{block "title" .}}{{.Page.Title}}{{end}}</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
 </head>
@@ -12,8 +12,7 @@
 <header class="app">
   <a href="/" class="brand">darek</a>
   <nav class="primary">
-    {{range .Page.Nav}}<a href="{{.Path}}"{{if eq .Key $.Page.ActiveKey}} class="active"{{end}}>{{.Label}}</a>
-    {{end}}
+    {{range .Page.Nav}}<a href="{{.Path}}"{{if eq .Key $.Page.ActiveKey}} class="active"{{end}}>{{.Label}}</a>{{end}}
   </nav>
   <span class="spacer"></span>
   <div id="sync-banner"></div>

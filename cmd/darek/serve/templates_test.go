@@ -78,11 +78,10 @@ func TestIndexRendersWithChrome(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	vm := indexVM{
-		Page:      s.page("queue", "darek — queue"),
-		PageTitle: "queue",
-		Path:      "/",
-		Kinds:     []string{"article"},
-		Ratings:   []int{1, 2, 3, 4, 5},
+		Page:    s.page("queue", "darek — queue"),
+		Path:    "/",
+		Kinds:   []string{"article"},
+		Ratings: []int{1, 2, 3, 4, 5},
 	}
 	if err := s.render(rec, "index.html", vm); err != nil {
 		t.Fatalf("render: %v", err)
@@ -92,6 +91,7 @@ func TestIndexRendersWithChrome(t *testing.T) {
 		`<footer class="app-footer">`,
 		`class="brand">darek`,
 		`href="/all"`,
+		`<title>darek — queue</title>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q\n--- body ---\n%s", want, body)

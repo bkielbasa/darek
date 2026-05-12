@@ -45,13 +45,12 @@ type ratingBtn struct {
 
 // indexVM is the view-model for the list page.
 type indexVM struct {
-	Page      Page
-	PageTitle string
-	Path      string
-	Query     listQuery
-	Kinds     []string
-	Ratings   []int
-	Links     []linkVM
+	Page    Page
+	Path    string
+	Query   listQuery
+	Kinds   []string
+	Ratings []int
+	Links   []linkVM
 }
 
 type listQuery struct {
@@ -204,9 +203,8 @@ func (s *Server) handleList(queueOnly bool) http.HandlerFunc {
 			activeKey = "archive"
 		}
 		vm := indexVM{
-			Page:      s.page(activeKey, "darek — "+title),
-			PageTitle: title,
-			Path:      path,
+			Page: s.page(activeKey, "darek — "+title),
+			Path: path,
 			Query:     q,
 			Kinds:     []string{"article", "video", "tweet", "podcast", "other"},
 			Ratings:   []int{1, 2, 3, 4, 5},

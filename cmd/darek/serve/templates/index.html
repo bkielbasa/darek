@@ -1,7 +1,5 @@
 {{define "index.html"}}{{template "layout" .}}{{end}}
 
-{{define "title"}}darek — {{.PageTitle}}{{end}}
-
 {{define "content"}}
 <div class="toolbar">
   <form method="post" action="/links/new" class="add-link">
@@ -34,7 +32,7 @@
     {{template "_row.html" .}}
   {{else}}
     <div class="empty">
-      {{if eq $.PageTitle "queue"}}
+      {{if eq $.Page.ActiveKey "queue"}}
         Inbox zero. Run <em>sync now</em> or add a link above.
       {{else}}
         No links match these filters.

@@ -740,15 +740,15 @@ button.danger:hover {
   gap: 1rem;
   align-items: center;
   padding: 0.75rem 1rem;
-  border-top: 1px solid #e5e5e5;
+  border-top: 1px solid var(--border);
   margin-top: 2rem;
   font-size: 0.85em;
-  color: #666;
+  color: var(--text-dim);
 }
 .app-footer .brand {
   font-weight: 600;
-  color: #333;
+  color: var(--text);
 }
 .app-footer .muted {
-  color: #888;
+  color: var(--text-faint);
 }
