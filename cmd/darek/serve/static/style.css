@@ -769,7 +769,21 @@ button.danger:hover {
   border-bottom: 1px dashed var(--border);
 }
 .wf-axis-spacer { /* mirrors the name column on data rows */ }
-.wf-axis { width: 100%; height: 20px; }
+.wf-axis {
+  position: relative;
+  height: 16px;
+}
+.wf-tick {
+  position: absolute;
+  top: 0;
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  /* default: centered on the tick position */
+  transform: translateX(-50%);
+}
+.wf-tick:first-child { transform: translateX(0); }       /* left edge */
+.wf-tick:last-child  { transform: translateX(-100%); }   /* right edge */
 
 .wf-row { background: transparent; }
 .wf-row > summary {
@@ -782,15 +796,17 @@ button.danger:hover {
   list-style: none;
 }
 .wf-row > summary::-webkit-details-marker { display: none; }
-.wf-row > summary::before {
-  content: "▸";
+/* Caret lives on .wf-name (an existing grid child) — not on summary — so it
+   does NOT become a grid item of summary's grid container. */
+.wf-name::before {
+  content: "▸ ";
   display: inline-block;
   width: 0.9em;
   color: var(--text-faint);
   font-size: 0.8em;
   transform: translateY(-1px);
 }
-.wf-row[open] > summary::before { content: "▾"; }
+.wf-row[open] > summary .wf-name::before { content: "▾ "; }
 
 .wf-name {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;

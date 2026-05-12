@@ -38,7 +38,8 @@ type executionsListVM struct {
 }
 
 type tickVM struct {
-	Pct   int    // 0..1000 — tenths of a percent. Matches SVG viewBox.
+	Pct   int    // 0..1000 — tenths of a percent.
+	Left  string // CSS percentage like "0%", "25%" — for HTML positioning of axis labels.
 	Label string // "0ms", "250ms", "1.0s"
 }
 
@@ -319,7 +320,11 @@ func buildTicks(durationMS int64) []tickVM {
 	out := make([]tickVM, len(pcts))
 	for i, p := range pcts {
 		ms := durationMS * int64(p) / 1000
-		out[i] = tickVM{Pct: p, Label: formatMS(ms)}
+		out[i] = tickVM{
+			Pct:   p,
+			Left:  fmt.Sprintf("%d%%", p/10),
+			Label: formatMS(ms),
+		}
 	}
 	return out
 }

@@ -209,12 +209,16 @@ func TestBuildTicks_FivePoints(t *testing.T) {
 	}
 	wantPcts := []int{0, 250, 500, 750, 1000}
 	wantLabels := []string{"0ms", "250ms", "500ms", "750ms", "1.0s"}
+	wantLefts := []string{"0%", "25%", "50%", "75%", "100%"}
 	for i, tk := range ticks {
 		if tk.Pct != wantPcts[i] {
 			t.Errorf("ticks[%d].Pct = %d, want %d", i, tk.Pct, wantPcts[i])
 		}
 		if tk.Label != wantLabels[i] {
 			t.Errorf("ticks[%d].Label = %q, want %q", i, tk.Label, wantLabels[i])
+		}
+		if tk.Left != wantLefts[i] {
+			t.Errorf("ticks[%d].Left = %q, want %q", i, tk.Left, wantLefts[i])
 		}
 	}
 }
