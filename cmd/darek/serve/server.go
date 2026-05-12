@@ -45,6 +45,8 @@ type Server struct {
 	whatsApp   WhatsAppManager // nil-safe; routes only register when non-nil
 	executions *exechistory.Store
 	jaegerURL  string
+
+	enabledNavItems []NavItem
 }
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
@@ -55,6 +57,7 @@ func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, wa
 		return nil, err
 	}
 	s := &Server{store: store, tmpl: t, mux: http.NewServeMux(), sync: sync, analyze: analyzer, auth: auth, whatsApp: wa, executions: exec, jaegerURL: jaegerURL}
+	s.enabledNavItems = filterNavItems(navItems, s)
 	s.routes()
 	return s, nil
 }
