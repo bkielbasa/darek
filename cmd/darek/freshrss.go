@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 
+	"log/slog"
+
 	"darek/config"
 	"darek/db"
 	"darek/exechistory"
@@ -44,7 +46,7 @@ func runFreshRSSSync(ctx context.Context, cfgPath string) (retErr error) {
 		return err
 	}
 
-	_, otelShutdown, err := obs.Init(ctx, obs.Options{
+	otelSetup, otelShutdown, err := obs.Init(ctx, obs.Options{
 		ServiceName: cfg.OTEL.ServiceName,
 		Endpoint:    cfg.OTEL.ExporterEndpoint,
 		Insecure:    cfg.OTEL.Insecure,
@@ -53,6 +55,17 @@ func runFreshRSSSync(ctx context.Context, cfgPath string) (retErr error) {
 		return fmt.Errorf("otel init: %w", err)
 	}
 	defer func() { _ = otelShutdown(context.Background()) }()
+
+	pool, err := db.Open(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("db: %w", err)
+	}
+	defer pool.Close()
+
+	if cfg.ExecutionHistory.Enabled {
+		otelSetup.TracerProvider.RegisterSpanProcessor(
+			exechistory.NewRecorder(pool, slog.Default()))
+	}
 
 	ctx, span := otel.Tracer("darek/cli").Start(ctx, "cli.freshrss.sync")
 	exechistory.MarkExecution(span, "cli-freshrss-sync")
@@ -63,12 +76,6 @@ func runFreshRSSSync(ctx context.Context, cfgPath string) (retErr error) {
 		}
 		span.End()
 	}()
-
-	pool, err := db.Open(ctx, dsn)
-	if err != nil {
-		return fmt.Errorf("db: %w", err)
-	}
-	defer pool.Close()
 
 	if err := obs.RegisterPoolGauges(pool); err != nil {
 		fmt.Fprintf(os.Stderr, "warn: register pool gauges: %v\n", err)

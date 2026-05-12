@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"log/slog"
+
 	"darek/blogmarketing"
 	"darek/config"
 	"darek/db"
@@ -43,7 +45,7 @@ func runBlogSync(ctx context.Context, cfgPath string) (retErr error) {
 	if err != nil {
 		return err
 	}
-	_, otelShutdown, err := obs.Init(ctx, obs.Options{
+	otelSetup, otelShutdown, err := obs.Init(ctx, obs.Options{
 		ServiceName: cfg.OTEL.ServiceName,
 		Endpoint:    cfg.OTEL.ExporterEndpoint,
 		Insecure:    cfg.OTEL.Insecure,
@@ -52,6 +54,17 @@ func runBlogSync(ctx context.Context, cfgPath string) (retErr error) {
 		return fmt.Errorf("otel init: %w", err)
 	}
 	defer func() { _ = otelShutdown(context.Background()) }()
+
+	pool, err := db.Open(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("db: %w", err)
+	}
+	defer pool.Close()
+
+	if cfg.ExecutionHistory.Enabled {
+		otelSetup.TracerProvider.RegisterSpanProcessor(
+			exechistory.NewRecorder(pool, slog.Default()))
+	}
 
 	ctx, span := otel.Tracer("darek/cli").Start(ctx, "cli.blog.sync")
 	exechistory.MarkExecution(span, "cli-blog-sync")
@@ -62,12 +75,6 @@ func runBlogSync(ctx context.Context, cfgPath string) (retErr error) {
 		}
 		span.End()
 	}()
-
-	pool, err := db.Open(ctx, dsn)
-	if err != nil {
-		return fmt.Errorf("db: %w", err)
-	}
-	defer pool.Close()
 
 	apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
 	if err != nil {
