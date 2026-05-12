@@ -1,0 +1,18 @@
+{{define "_waterfall.html"}}
+<div class="wf">
+  <div class="wf-axis-row">
+    <div class="wf-axis-spacer"></div>
+    <svg class="wf-axis" viewBox="0 0 1000 20" preserveAspectRatio="none" aria-hidden="true">
+      {{range .Ticks}}
+        <line x1="{{.Pct}}" y1="0" x2="{{.Pct}}" y2="6" stroke="#bdb8a8" stroke-width="1"/>
+        <text x="{{.Pct}}" y="16" font-size="10" fill="#6b6b6b" text-anchor="middle">{{.Label}}</text>
+      {{end}}
+    </svg>
+  </div>
+  {{range .Steps}}
+    {{template "_step_row.html" .}}
+  {{else}}
+    <p class="wf-empty">No persisted child steps.</p>
+  {{end}}
+</div>
+{{end}}

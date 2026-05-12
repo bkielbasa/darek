@@ -1,0 +1,23 @@
+{{define "_step_row.html"}}
+<details class="wf-row {{if .IsError}}wf-row-error{{end}}">
+  <summary>
+    <span class="wf-name" style="padding-left: {{.Indent}}em" title="{{.Name}}">{{.Name}}</span>
+    <span class="wf-lane">
+      <svg viewBox="0 0 1000 22" preserveAspectRatio="none" aria-hidden="true">
+        <rect class="wf-bar {{if .IsError}}wf-bar-error{{end}}"
+              x="{{.OffsetPct}}" y="4"
+              width="{{.WidthPct}}" height="14"
+              fill="{{.Color}}" rx="2" ry="2">
+          <title>{{.Name}} · {{.DurationMS}}ms · +{{.OffsetMS}}ms from start</title>
+        </rect>
+      </svg>
+      <span class="wf-num">{{.DurationMS}} ms</span>
+    </span>
+  </summary>
+  <div class="wf-detail">
+    {{if .Error}}<p class="wf-err">{{.Error}}</p>{{end}}
+    <pre>{{.AttributesJSON}}</pre>
+    <pre>{{.EventsJSON}}</pre>
+  </div>
+</details>
+{{end}}
