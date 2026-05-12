@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"darek/exechistory"
+
+	"github.com/google/uuid"
 )
 
 func TestKindColor_KnownPrefixIsStable(t *testing.T) {
@@ -226,5 +228,61 @@ func TestBuildTicks_ZeroDuration(t *testing.T) {
 		if tk.Label != "0ms" {
 			t.Errorf("ticks[%d].Label = %q, want \"0ms\"", i, tk.Label)
 		}
+	}
+}
+
+func TestBuildExecutionRowVMs_WidthScaledByMax(t *testing.T) {
+	rows := []exechistory.Execution{
+		{ID: uuid.New(), Kind: "sync", Name: "n1", StartedAt: time.Now(), DurationMS: 100, Status: "ok"},
+		{ID: uuid.New(), Kind: "sync", Name: "n2", StartedAt: time.Now(), DurationMS: 400, Status: "ok"},
+	}
+	vms, max := buildExecutionRowVMs(rows)
+	if max != 400 {
+		t.Errorf("max = %d, want 400", max)
+	}
+	if vms[0].WidthPct != 250 {
+		t.Errorf("rows[0].WidthPct = %d, want 250", vms[0].WidthPct)
+	}
+	if vms[1].WidthPct != 1000 {
+		t.Errorf("rows[1].WidthPct = %d, want 1000", vms[1].WidthPct)
+	}
+	if vms[0].Color == "" {
+		t.Error("rows[0].Color is empty")
+	}
+}
+
+func TestBuildExecutionRowVMs_EmptyHasZeroMax(t *testing.T) {
+	vms, max := buildExecutionRowVMs(nil)
+	if max != 0 {
+		t.Errorf("max = %d, want 0", max)
+	}
+	if len(vms) != 0 {
+		t.Errorf("len(vms) = %d, want 0", len(vms))
+	}
+}
+
+func TestBuildExecutionRowVMs_AllZeroDurationsRenderNoWidth(t *testing.T) {
+	rows := []exechistory.Execution{
+		{ID: uuid.New(), Kind: "sync", Name: "n", StartedAt: time.Now(), DurationMS: 0, Status: "ok"},
+		{ID: uuid.New(), Kind: "sync", Name: "n", StartedAt: time.Now(), DurationMS: 0, Status: "ok"},
+	}
+	vms, max := buildExecutionRowVMs(rows)
+	if max != 0 {
+		t.Errorf("max = %d, want 0", max)
+	}
+	for i, vm := range vms {
+		if vm.WidthPct != 0 {
+			t.Errorf("rows[%d].WidthPct = %d, want 0", i, vm.WidthPct)
+		}
+	}
+}
+
+func TestBuildExecutionRowVMs_ErrorStatus(t *testing.T) {
+	rows := []exechistory.Execution{
+		{ID: uuid.New(), Kind: "sync", Name: "n", StartedAt: time.Now(), DurationMS: 100, Status: "error"},
+	}
+	vms, _ := buildExecutionRowVMs(rows)
+	if !vms[0].IsError {
+		t.Error("IsError = false, want true")
 	}
 }

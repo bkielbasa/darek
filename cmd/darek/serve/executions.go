@@ -21,17 +21,20 @@ type executionRowVM struct {
 	Name       string
 	StartedAt  string
 	DurationMS int64
+	WidthPct   int    // 0..1000 — tenths of a percent of MaxDurationMS
+	Color      string // hex; from kindColor()
 	Status     string
 	IsError    bool
 }
 
 type executionsListVM struct {
-	Page       Page
-	Kinds      []string
-	Kind       string
-	Rows       []executionRowVM
-	NextBefore string
-	Disabled   bool
+	Page          Page
+	Kinds         []string
+	Kind          string
+	Rows          []executionRowVM
+	MaxDurationMS int64
+	NextBefore    string
+	Disabled      bool
 }
 
 type tickVM struct {
@@ -96,22 +99,13 @@ func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	rowVMs, maxDur := buildExecutionRowVMs(rows)
 	vm := executionsListVM{
-		Page:  s.page("executions", "executions · darek"),
-		Kinds: kinds,
-		Kind:  f.Kind,
-		Rows:  make([]executionRowVM, 0, len(rows)),
-	}
-	for _, e := range rows {
-		vm.Rows = append(vm.Rows, executionRowVM{
-			ID:         e.ID.String(),
-			Kind:       e.Kind,
-			Name:       e.Name,
-			StartedAt:  e.StartedAt.Format("2006-01-02 15:04:05"),
-			DurationMS: e.DurationMS,
-			Status:     e.Status,
-			IsError:    e.Status == "error",
-		})
+		Page:          s.page("executions", "executions · darek"),
+		Kinds:         kinds,
+		Kind:          f.Kind,
+		Rows:          rowVMs,
+		MaxDurationMS: maxDur,
 	}
 	if len(rows) == f.Limit {
 		vm.NextBefore = rows[len(rows)-1].StartedAt.Format(time.RFC3339Nano)
@@ -328,4 +322,39 @@ func buildTicks(durationMS int64) []tickVM {
 		out[i] = tickVM{Pct: p, Label: formatMS(ms)}
 	}
 	return out
+}
+
+// buildExecutionRowVMs converts execution rows into the view-model the
+// list template renders, plus the max-duration denominator used to scale
+// per-row mini-bars. Pure: no DB, no clock.
+//
+// WidthPct is in tenths of a percent (0..1000) so the SVG viewBox of
+// "0 0 1000 H" is a direct integer scale. When all rows have duration 0,
+// max is 0 and every WidthPct is 0.
+func buildExecutionRowVMs(rows []exechistory.Execution) ([]executionRowVM, int64) {
+	out := make([]executionRowVM, 0, len(rows))
+	var max int64
+	for _, e := range rows {
+		if e.DurationMS > max {
+			max = e.DurationMS
+		}
+	}
+	for _, e := range rows {
+		width := 0
+		if max > 0 {
+			width = int(e.DurationMS * 1000 / max)
+		}
+		out = append(out, executionRowVM{
+			ID:         e.ID.String(),
+			Kind:       e.Kind,
+			Name:       e.Name,
+			StartedAt:  e.StartedAt.Format("2006-01-02 15:04:05"),
+			DurationMS: e.DurationMS,
+			WidthPct:   width,
+			Color:      kindColor(e.Kind),
+			Status:     e.Status,
+			IsError:    e.Status == "error",
+		})
+	}
+	return out, max
 }
