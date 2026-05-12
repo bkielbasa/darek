@@ -98,16 +98,3 @@ func parseTemplateBundle() (*templateBundle, error) {
 	return b, nil
 }
 
-// parseTemplates is the legacy flat parser. Removed in a later task once
-// every handler renders via render/renderPartial.
-func parseTemplates() (*template.Template, error) {
-	files, err := fs.Glob(templatesFS, "templates/*.html")
-	if err != nil {
-		return nil, fmt.Errorf("glob templates: %w", err)
-	}
-	t, err := template.ParseFS(templatesFS, files...)
-	if err != nil {
-		return nil, fmt.Errorf("parse templates: %w", err)
-	}
-	return t, nil
-}

@@ -110,13 +110,10 @@ func newAuthedServer(t *testing.T, pw string) *Server {
 		SessionKey:   testKey,
 		SessionTTL:   time.Hour,
 	}
-	tmpl, err := parseTemplates()
-	require.NoError(t, err)
 	bundle, err := parseTemplateBundle()
 	require.NoError(t, err)
 	s := &Server{
 		mux:       http.NewServeMux(),
-		tmpl:      tmpl,
 		auth:      a,
 		loginTmpl: bundle.loginTmpl,
 	}

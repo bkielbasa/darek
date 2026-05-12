@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"darek/exechistory"
 	"darek/tools/whatsapp"
 )
 
@@ -197,3 +198,26 @@ func (fakeWhatsAppManager) SetIngestEnabled(context.Context, string, bool) error
 	return nil
 }
 func (fakeWhatsAppManager) Unpair(context.Context) error { return nil }
+
+func TestNavItemsAreRoutable(t *testing.T) {
+	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	// Server with every feature wired so all nav items are enabled.
+	s, err := New(nil, nil, nil, a, fakeWhatsAppManager{}, &exechistory.Store{}, "")
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	for _, n := range s.enabledNav() {
+		req := httptest.NewRequest("GET", n.Path, nil)
+		rec := httptest.NewRecorder()
+		// Handlers may panic against the zero-value exechistory.Store
+		// (nil pool). A panic still proves the route is registered, which
+		// is all this test asserts.
+		func() {
+			defer func() { _ = recover() }()
+			s.mux.ServeHTTP(rec, req)
+		}()
+		if rec.Code == 404 {
+			t.Errorf("nav %q -> %s: got 404 (no handler registered)", n.Key, n.Path)
+		}
+	}
+}

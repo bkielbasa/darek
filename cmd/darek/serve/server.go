@@ -37,7 +37,6 @@ type WhatsAppManager interface {
 // Server is the HTTP UI for browsing and rating links.
 type Server struct {
 	store      *links.Store
-	tmpl       *template.Template
 	mux        *http.ServeMux
 	sync       SyncFn
 	analyze    Analyzer
@@ -58,17 +57,12 @@ type Server struct {
 // New constructs a Server. If sync is nil, the /sync route returns 501.
 // If analyzer is nil, /links/{id}/analyze returns 501 and the UI hides the button.
 func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, wa WhatsAppManager, exec *exechistory.Store, jaegerURL string) (*Server, error) {
-	t, err := parseTemplates()
-	if err != nil {
-		return nil, err
-	}
 	b, err := parseTemplateBundle()
 	if err != nil {
 		return nil, err
 	}
 	s := &Server{
 		store:      store,
-		tmpl:       t,
 		mux:        http.NewServeMux(),
 		sync:       sync,
 		analyze:    analyzer,
