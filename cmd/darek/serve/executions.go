@@ -275,6 +275,10 @@ func buildStepVMs(exec exechistory.Execution, steps []exechistory.Step) []stepVM
 	indent := stepIndents(steps, exec.SpanID)
 	totalMS := exec.DurationMS
 	for _, sp := range steps {
+		// offsetMS feeds both the layout (OffsetPct) and the tooltip
+		// (OffsetMS). Clamping to 0 means a clock-skewed step renders at
+		// the lane's start AND its tooltip shows "+0ms from start" rather
+		// than a negative value.
 		offsetMS := sp.StartedAt.Sub(exec.StartedAt).Milliseconds()
 		if offsetMS < 0 {
 			offsetMS = 0
@@ -318,7 +322,7 @@ func buildStepVMs(exec exechistory.Execution, steps []exechistory.Step) []stepVM
 // zero, all five labels are "0ms".
 func buildTicks(durationMS int64) []tickVM {
 	pcts := []int{0, 250, 500, 750, 1000}
-	out := make([]tickVM, 5)
+	out := make([]tickVM, len(pcts))
 	for i, p := range pcts {
 		ms := durationMS * int64(p) / 1000
 		out[i] = tickVM{Pct: p, Label: formatMS(ms)}

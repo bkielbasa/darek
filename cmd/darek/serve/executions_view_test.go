@@ -168,8 +168,17 @@ func TestBuildStepVMs_NegativeOffsetIsClamped(t *testing.T) {
 			StartedAt: start.Add(-100 * time.Millisecond), EndedAt: start.Add(50 * time.Millisecond), DurationMS: 150, Status: "ok"},
 	}
 	vms := buildStepVMs(exec, steps)
+	// Negative offset clamps to 0; the bar's width remains the step's
+	// scaled duration. For a 150ms step against a 1000ms execution, that's
+	// 150 tenths-of-a-percent.
 	if vms[0].OffsetPct != 0 {
 		t.Errorf("OffsetPct = %d, want 0 (clamped)", vms[0].OffsetPct)
+	}
+	if vms[0].WidthPct != 150 {
+		t.Errorf("WidthPct = %d, want 150", vms[0].WidthPct)
+	}
+	if vms[0].OffsetMS != 0 {
+		t.Errorf("OffsetMS = %d, want 0 (clamped — tooltip shows 0 not negative)", vms[0].OffsetMS)
 	}
 }
 
@@ -181,8 +190,13 @@ func TestBuildStepVMs_WidthClampedToLane(t *testing.T) {
 			StartedAt: start.Add(800 * time.Millisecond), EndedAt: start.Add(1500 * time.Millisecond), DurationMS: 700, Status: "ok"},
 	}
 	vms := buildStepVMs(exec, steps)
-	if vms[0].OffsetPct+vms[0].WidthPct > 1000 {
-		t.Errorf("offset+width = %d, want ≤ 1000 (clamped)", vms[0].OffsetPct+vms[0].WidthPct)
+	// Step ends past the execution: OffsetPct stays at the real start,
+	// WidthPct is clamped so OffsetPct+WidthPct == 1000 (full remaining lane).
+	if vms[0].OffsetPct != 800 {
+		t.Errorf("OffsetPct = %d, want 800", vms[0].OffsetPct)
+	}
+	if vms[0].WidthPct != 200 {
+		t.Errorf("WidthPct = %d, want 200 (clamped from 700)", vms[0].WidthPct)
 	}
 }
 
