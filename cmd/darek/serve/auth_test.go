@@ -112,10 +112,13 @@ func newAuthedServer(t *testing.T, pw string) *Server {
 	}
 	tmpl, err := parseTemplates()
 	require.NoError(t, err)
+	bundle, err := parseTemplateBundle()
+	require.NoError(t, err)
 	s := &Server{
-		mux:  http.NewServeMux(),
-		tmpl: tmpl,
-		auth: a,
+		mux:       http.NewServeMux(),
+		tmpl:      tmpl,
+		auth:      a,
+		loginTmpl: bundle.loginTmpl,
 	}
 	s.routesAuth()
 	// register a sentinel "private" route to test the middleware

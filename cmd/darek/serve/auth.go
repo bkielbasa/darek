@@ -151,7 +151,7 @@ func (s *Server) handleLoginGet(w http.ResponseWriter, r *http.Request) {
 		Next:  sanitizeNext(r.URL.Query().Get("next")),
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.tmpl.ExecuteTemplate(w, "login.html", data); err != nil {
+	if err := s.loginTmpl.ExecuteTemplate(w, "login.html", data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
