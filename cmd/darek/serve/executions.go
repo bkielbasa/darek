@@ -34,10 +34,18 @@ type executionsListVM struct {
 	Disabled   bool
 }
 
+type tickVM struct {
+	Pct   int    // 0..1000 — tenths of a percent. Matches SVG viewBox.
+	Label string // "0ms", "250ms", "1.0s"
+}
+
 type stepVM struct {
 	Name           string
 	DurationMS     int64
-	WidthPct       int
+	OffsetMS       int64  // start offset from execution start, in ms (for tooltip)
+	OffsetPct      int    // 0..1000 — start offset as tenths of a percent
+	WidthPct       int    // 0..1000 — duration as tenths of a percent
+	Color          string // hex; from kindColor()
 	Status         string
 	IsError        bool
 	Error          string
@@ -53,6 +61,7 @@ type executionDetailVM struct {
 	EndedAt    string
 	Attributes map[string]any
 	Steps      []stepVM
+	Ticks      []tickVM
 	JaegerURL  string
 	Disabled   bool
 }
@@ -140,30 +149,11 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 		StartedAt:  exec.StartedAt.Format("2006-01-02 15:04:05.000"),
 		EndedAt:    exec.EndedAt.Format("2006-01-02 15:04:05.000"),
 		Attributes: exec.Attributes,
+		Steps:      buildStepVMs(exec, steps),
+		Ticks:      buildTicks(exec.DurationMS),
 	}
 	if s.jaegerURL != "" {
 		vm.JaegerURL = fmt.Sprintf("%s/trace/%s", s.jaegerURL, exec.TraceID)
-	}
-	indent := stepIndents(steps, exec.SpanID)
-	for _, sp := range steps {
-		width := 0
-		if exec.DurationMS > 0 {
-			width = int(sp.DurationMS * 100 / exec.DurationMS)
-			if width > 100 {
-				width = 100
-			}
-		}
-		vm.Steps = append(vm.Steps, stepVM{
-			Name:           sp.Name,
-			DurationMS:     sp.DurationMS,
-			WidthPct:       width,
-			Status:         sp.Status,
-			IsError:        sp.Status == "error",
-			Error:          sp.Error,
-			Indent:         indent[sp.SpanID],
-			AttributesJSON: jsonString(sp.Attributes),
-			EventsJSON:     jsonString(sp.Events),
-		})
 	}
 	if err := s.render(w, "execution_detail.html", vm); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -269,4 +259,69 @@ func formatMS(ms int64) string {
 	minutes := ms / 60000
 	seconds := (ms % 60000) / 1000
 	return fmt.Sprintf("%dm %ds", minutes, seconds)
+}
+
+// buildStepVMs converts persisted steps into the view-model the waterfall
+// template renders. Pure: no DB, no clock — given equal inputs it returns
+// equal outputs. OffsetPct/WidthPct are in tenths of a percent (0..1000)
+// so the SVG viewBox of "0 0 1000 H" is a direct integer scale.
+//
+// Edge cases:
+//   - DurationMS == 0: all percentages are 0; no division by zero.
+//   - Step starts before execution (clock skew): OffsetPct clamped to 0.
+//   - Step ends after execution: OffsetPct+WidthPct clamped to 1000.
+func buildStepVMs(exec exechistory.Execution, steps []exechistory.Step) []stepVM {
+	out := make([]stepVM, 0, len(steps))
+	indent := stepIndents(steps, exec.SpanID)
+	totalMS := exec.DurationMS
+	for _, sp := range steps {
+		offsetMS := sp.StartedAt.Sub(exec.StartedAt).Milliseconds()
+		if offsetMS < 0 {
+			offsetMS = 0
+		}
+		offsetPct := 0
+		widthPct := 0
+		if totalMS > 0 {
+			offsetPct = int(offsetMS * 1000 / totalMS)
+			if offsetPct > 1000 {
+				offsetPct = 1000
+			}
+			widthPct = int(sp.DurationMS * 1000 / totalMS)
+			if offsetPct+widthPct > 1000 {
+				widthPct = 1000 - offsetPct
+			}
+			if widthPct < 0 {
+				widthPct = 0
+			}
+		}
+		out = append(out, stepVM{
+			Name:           sp.Name,
+			DurationMS:     sp.DurationMS,
+			OffsetMS:       offsetMS,
+			OffsetPct:      offsetPct,
+			WidthPct:       widthPct,
+			Color:          kindColor(sp.Name),
+			Status:         sp.Status,
+			IsError:        sp.Status == "error",
+			Error:          sp.Error,
+			Indent:         indent[sp.SpanID],
+			AttributesJSON: jsonString(sp.Attributes),
+			EventsJSON:     jsonString(sp.Events),
+		})
+	}
+	return out
+}
+
+// buildTicks returns exactly five evenly-spaced ticks across an execution's
+// total duration. Pcts are 0/250/500/750/1000 (tenths of a percent).
+// Labels go through formatMS so they're human-readable. When durationMS is
+// zero, all five labels are "0ms".
+func buildTicks(durationMS int64) []tickVM {
+	pcts := []int{0, 250, 500, 750, 1000}
+	out := make([]tickVM, 5)
+	for i, p := range pcts {
+		ms := durationMS * int64(p) / 1000
+		out[i] = tickVM{Pct: p, Label: formatMS(ms)}
+	}
+	return out
 }

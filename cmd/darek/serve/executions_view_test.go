@@ -1,6 +1,11 @@
 package serve
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"darek/exechistory"
+)
 
 func TestKindColor_KnownPrefixIsStable(t *testing.T) {
 	a := kindColor("todoist.fetch")
@@ -72,6 +77,140 @@ func TestFormatMS(t *testing.T) {
 	for _, tc := range tests {
 		if got := formatMS(tc.ms); got != tc.want {
 			t.Errorf("formatMS(%d) = %q, want %q", tc.ms, got, tc.want)
+		}
+	}
+}
+
+func mustParse(t *testing.T, s string) time.Time {
+	t.Helper()
+	v, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		t.Fatalf("parse %q: %v", s, err)
+	}
+	return v
+}
+
+func TestBuildStepVMs_OffsetAndWidth(t *testing.T) {
+	start := mustParse(t, "2026-05-12T10:00:00Z")
+	exec := exechistory.Execution{
+		SpanID:     "root",
+		StartedAt:  start,
+		EndedAt:    start.Add(1000 * time.Millisecond),
+		DurationMS: 1000,
+	}
+	steps := []exechistory.Step{
+		{SpanID: "a", ParentSpanID: "root", Name: "todoist.fetch",
+			StartedAt: start, EndedAt: start.Add(300 * time.Millisecond), DurationMS: 300, Status: "ok"},
+		{SpanID: "b", ParentSpanID: "root", Name: "freshrss.import",
+			StartedAt: start.Add(300 * time.Millisecond), EndedAt: start.Add(700 * time.Millisecond), DurationMS: 400, Status: "ok"},
+		{SpanID: "c", ParentSpanID: "root", Name: "openai.chat",
+			StartedAt: start.Add(700 * time.Millisecond), EndedAt: start.Add(1000 * time.Millisecond), DurationMS: 300, Status: "error", Error: "boom"},
+	}
+
+	vms := buildStepVMs(exec, steps)
+	if len(vms) != 3 {
+		t.Fatalf("len(vms) = %d, want 3", len(vms))
+	}
+	cases := []struct {
+		name             string
+		wantOffsetMS     int64
+		wantOffsetTenths int
+		wantWidthTenths  int
+		wantError        bool
+	}{
+		{"todoist.fetch", 0, 0, 300, false},
+		{"freshrss.import", 300, 300, 400, false},
+		{"openai.chat", 700, 700, 300, true},
+	}
+	for i, c := range cases {
+		got := vms[i]
+		if got.Name != c.name {
+			t.Errorf("[%d] Name = %q, want %q", i, got.Name, c.name)
+		}
+		if got.OffsetMS != c.wantOffsetMS {
+			t.Errorf("[%d %s] OffsetMS = %d, want %d", i, c.name, got.OffsetMS, c.wantOffsetMS)
+		}
+		if got.OffsetPct != c.wantOffsetTenths {
+			t.Errorf("[%d %s] OffsetPct = %d, want %d", i, c.name, got.OffsetPct, c.wantOffsetTenths)
+		}
+		if got.WidthPct != c.wantWidthTenths {
+			t.Errorf("[%d %s] WidthPct = %d, want %d", i, c.name, got.WidthPct, c.wantWidthTenths)
+		}
+		if got.IsError != c.wantError {
+			t.Errorf("[%d %s] IsError = %v, want %v", i, c.name, got.IsError, c.wantError)
+		}
+		if got.Color == "" {
+			t.Errorf("[%d %s] Color is empty", i, c.name)
+		}
+	}
+}
+
+func TestBuildStepVMs_ZeroDurationDoesNotPanic(t *testing.T) {
+	start := mustParse(t, "2026-05-12T10:00:00Z")
+	exec := exechistory.Execution{SpanID: "root", StartedAt: start, EndedAt: start, DurationMS: 0}
+	steps := []exechistory.Step{
+		{SpanID: "a", ParentSpanID: "root", Name: "x", StartedAt: start, EndedAt: start, DurationMS: 0, Status: "ok"},
+	}
+	vms := buildStepVMs(exec, steps)
+	if len(vms) != 1 {
+		t.Fatalf("len = %d, want 1", len(vms))
+	}
+	if vms[0].WidthPct != 0 || vms[0].OffsetPct != 0 {
+		t.Errorf("zero-duration: got offset=%d width=%d, want 0/0", vms[0].OffsetPct, vms[0].WidthPct)
+	}
+}
+
+func TestBuildStepVMs_NegativeOffsetIsClamped(t *testing.T) {
+	start := mustParse(t, "2026-05-12T10:00:00Z")
+	exec := exechistory.Execution{SpanID: "root", StartedAt: start, EndedAt: start.Add(1000 * time.Millisecond), DurationMS: 1000}
+	steps := []exechistory.Step{
+		{SpanID: "a", ParentSpanID: "root", Name: "x",
+			StartedAt: start.Add(-100 * time.Millisecond), EndedAt: start.Add(50 * time.Millisecond), DurationMS: 150, Status: "ok"},
+	}
+	vms := buildStepVMs(exec, steps)
+	if vms[0].OffsetPct != 0 {
+		t.Errorf("OffsetPct = %d, want 0 (clamped)", vms[0].OffsetPct)
+	}
+}
+
+func TestBuildStepVMs_WidthClampedToLane(t *testing.T) {
+	start := mustParse(t, "2026-05-12T10:00:00Z")
+	exec := exechistory.Execution{SpanID: "root", StartedAt: start, EndedAt: start.Add(1000 * time.Millisecond), DurationMS: 1000}
+	steps := []exechistory.Step{
+		{SpanID: "a", ParentSpanID: "root", Name: "x",
+			StartedAt: start.Add(800 * time.Millisecond), EndedAt: start.Add(1500 * time.Millisecond), DurationMS: 700, Status: "ok"},
+	}
+	vms := buildStepVMs(exec, steps)
+	if vms[0].OffsetPct+vms[0].WidthPct > 1000 {
+		t.Errorf("offset+width = %d, want ≤ 1000 (clamped)", vms[0].OffsetPct+vms[0].WidthPct)
+	}
+}
+
+func TestBuildTicks_FivePoints(t *testing.T) {
+	ticks := buildTicks(1000)
+	if len(ticks) != 5 {
+		t.Fatalf("len(ticks) = %d, want 5", len(ticks))
+	}
+	wantPcts := []int{0, 250, 500, 750, 1000}
+	wantLabels := []string{"0ms", "250ms", "500ms", "750ms", "1.0s"}
+	for i, tk := range ticks {
+		if tk.Pct != wantPcts[i] {
+			t.Errorf("ticks[%d].Pct = %d, want %d", i, tk.Pct, wantPcts[i])
+		}
+		if tk.Label != wantLabels[i] {
+			t.Errorf("ticks[%d].Label = %q, want %q", i, tk.Label, wantLabels[i])
+		}
+	}
+}
+
+func TestBuildTicks_ZeroDuration(t *testing.T) {
+	ticks := buildTicks(0)
+	if len(ticks) != 5 {
+		t.Fatalf("len(ticks) = %d, want 5", len(ticks))
+	}
+	for i, tk := range ticks {
+		if tk.Label != "0ms" {
+			t.Errorf("ticks[%d].Label = %q, want \"0ms\"", i, tk.Label)
 		}
 	}
 }
