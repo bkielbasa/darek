@@ -1,74 +1,55 @@
-{{define "execution_detail.html"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>execution · darek</title>
-  <link rel="stylesheet" href="/static/style.css">
-</head>
-<body>
-<header class="app">
-  <a href="/" class="brand">darek</a>
-  <nav class="primary">
-    <a href="/">queue</a>
-    <a href="/all">archive</a>
-    <a href="/executions" class="active">executions</a>
-  </nav>
-</header>
-<main>
-  {{if .Disabled}}
-  <p>Execution history is disabled.</p>
-  {{else}}
-  <p><a href="/executions">← back to executions</a></p>
-  <h1>{{.Exec.Kind}}: {{.Exec.Name}}</h1>
+{{define "execution_detail.html"}}{{template "layout" .}}{{end}}
 
-  <dl class="summary">
-    <dt>Started</dt><dd>{{.StartedAt}}</dd>
-    <dt>Ended</dt><dd>{{.EndedAt}}</dd>
-    <dt>Duration</dt><dd>{{.Exec.DurationMS}} ms</dd>
-    <dt>Status</dt><dd>{{.Exec.Status}}</dd>
-    {{if .Exec.Error}}<dt>Error</dt><dd class="err">{{.Exec.Error}}</dd>{{end}}
-    <dt>Trace ID</dt><dd><code>{{.Exec.TraceID}}</code></dd>
-  </dl>
+{{define "content"}}
+{{if .Disabled}}
+<p>Execution history is disabled.</p>
+{{else}}
+<p><a href="/executions">← back to executions</a></p>
+<h1>{{.Exec.Kind}}: {{.Exec.Name}}</h1>
 
-  {{if .Attributes}}
-  <h2>Attributes</h2>
-  <ul class="attrs">
-    {{range $k, $v := .Attributes}}<li><code>{{$k}}</code> = <code>{{$v}}</code></li>{{end}}
-  </ul>
-  {{end}}
+<dl class="summary">
+  <dt>Started</dt><dd>{{.StartedAt}}</dd>
+  <dt>Ended</dt><dd>{{.EndedAt}}</dd>
+  <dt>Duration</dt><dd>{{.Exec.DurationMS}} ms</dd>
+  <dt>Status</dt><dd>{{.Exec.Status}}</dd>
+  {{if .Exec.Error}}<dt>Error</dt><dd class="err">{{.Exec.Error}}</dd>{{end}}
+  <dt>Trace ID</dt><dd><code>{{.Exec.TraceID}}</code></dd>
+</dl>
 
-  {{if .JaegerURL}}<p><a href="{{.JaegerURL}}" target="_blank" rel="noopener">Open in Jaeger →</a></p>{{end}}
+{{if .Attributes}}
+<h2>Attributes</h2>
+<ul class="attrs">
+  {{range $k, $v := .Attributes}}<li><code>{{$k}}</code> = <code>{{$v}}</code></li>{{end}}
+</ul>
+{{end}}
 
-  <h2>Steps</h2>
-  {{if .Steps}}
-  <table class="steps">
-    <thead><tr><th>Name</th><th>Duration</th><th>Status</th></tr></thead>
-    <tbody>
-      {{range .Steps}}
-      <tr class="{{if .IsError}}row-error{{end}}">
-        <td style="padding-left: {{.Indent}}em">{{.Name}}</td>
-        <td>
-          <div class="dur-bar" style="width: {{.WidthPct}}%"></div>
-          <span class="dur-num">{{.DurationMS}} ms</span>
-        </td>
-        <td>{{.Status}}{{if .Error}} — {{.Error}}{{end}}</td>
-      </tr>
-      <tr><td colspan="3">
-        <details><summary>attrs / events</summary>
-          <pre>{{.AttributesJSON}}</pre>
-          <pre>{{.EventsJSON}}</pre>
-        </details>
-      </td></tr>
-      {{end}}
-    </tbody>
-  </table>
-  {{else}}
-  <p>No persisted child steps.</p>
-  {{end}}
-  {{end}}
-</main>
-</body>
-</html>
+{{if .JaegerURL}}<p><a href="{{.JaegerURL}}" target="_blank" rel="noopener">Open in Jaeger →</a></p>{{end}}
+
+<h2>Steps</h2>
+{{if .Steps}}
+<table class="steps">
+  <thead><tr><th>Name</th><th>Duration</th><th>Status</th></tr></thead>
+  <tbody>
+    {{range .Steps}}
+    <tr class="{{if .IsError}}row-error{{end}}">
+      <td style="padding-left: {{.Indent}}em">{{.Name}}</td>
+      <td>
+        <div class="dur-bar" style="width: {{.WidthPct}}%"></div>
+        <span class="dur-num">{{.DurationMS}} ms</span>
+      </td>
+      <td>{{.Status}}{{if .Error}} — {{.Error}}{{end}}</td>
+    </tr>
+    <tr><td colspan="3">
+      <details><summary>attrs / events</summary>
+        <pre>{{.AttributesJSON}}</pre>
+        <pre>{{.EventsJSON}}</pre>
+      </details>
+    </td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p>No persisted child steps.</p>
+{{end}}
+{{end}}
 {{end}}

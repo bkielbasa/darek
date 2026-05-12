@@ -128,3 +128,30 @@ func TestExecutionsListRendersWithChrome(t *testing.T) {
 		}
 	}
 }
+
+func TestExecutionDetailRendersWithChrome(t *testing.T) {
+	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, nil, nil, "")
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	vm := executionDetailVM{
+		Page:     s.page("executions", "execution · darek"),
+		Disabled: true,
+	}
+	rec := httptest.NewRecorder()
+	if err := s.render(rec, "execution_detail.html", vm); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`<footer class="app-footer">`,
+		`Execution history is disabled`,
+		`href="/all"`,
+		`<title>execution · darek</title>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+}

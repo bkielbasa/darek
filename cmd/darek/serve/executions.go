@@ -45,7 +45,7 @@ type stepVM struct {
 }
 
 type executionDetailVM struct {
-	PageTitle  string
+	Page       Page
 	Exec       exechistory.Execution
 	StartedAt  string
 	EndedAt    string
@@ -112,8 +112,9 @@ func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 	if s.executions == nil {
-		_ = s.tmpl.ExecuteTemplate(w, "execution_detail.html", executionDetailVM{
-			PageTitle: "execution", Disabled: true,
+		_ = s.render(w, "execution_detail.html", executionDetailVM{
+			Page:     s.page("executions", "execution · darek"),
+			Disabled: true,
 		})
 		return
 	}
@@ -132,7 +133,7 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vm := executionDetailVM{
-		PageTitle:  "execution",
+		Page:       s.page("executions", "execution · darek"),
 		Exec:       exec,
 		StartedAt:  exec.StartedAt.Format("2006-01-02 15:04:05.000"),
 		EndedAt:    exec.EndedAt.Format("2006-01-02 15:04:05.000"),
@@ -162,7 +163,7 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 			EventsJSON:     jsonString(sp.Events),
 		})
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "execution_detail.html", vm); err != nil {
+	if err := s.render(w, "execution_detail.html", vm); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
