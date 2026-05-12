@@ -1,23 +1,7 @@
-{{define "whatsapp.html"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>darek — whatsapp</title>
-  <link rel="stylesheet" href="/static/style.css">
-  <script src="https://unpkg.com/htmx.org@1.9.12" integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2" crossorigin="anonymous"></script>
-</head>
-<body>
-<header class="app">
-  <a href="/" class="brand">darek</a>
-  <nav class="primary">
-    <a href="/">queue</a>
-    <a href="/all">archive</a>
-    <a href="/whatsapp" class="active">whatsapp</a>
-  </nav>
-</header>
-<main class="wa-page">
+{{define "whatsapp.html"}}{{template "layout" .}}{{end}}
+
+{{define "content"}}
+<div class="wa-page">
   <h1>WhatsApp</h1>
 
   {{if .State.Paired}}
@@ -63,7 +47,5 @@
 
     <p class="hint">Refreshes every 20 seconds. Once paired, this page swaps to your groups list.</p>
   {{end}}
-</main>
-</body>
-</html>
+</div>
 {{end}}

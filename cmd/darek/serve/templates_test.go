@@ -1,10 +1,13 @@
 package serve
 
 import (
+	"context"
 	"net/http/httptest"
 	"sort"
 	"strings"
 	"testing"
+
+	"darek/tools/whatsapp"
 )
 
 func TestParseTemplateBundle(t *testing.T) {
@@ -155,3 +158,42 @@ func TestExecutionDetailRendersWithChrome(t *testing.T) {
 		}
 	}
 }
+
+func TestWhatsAppRendersWithChrome(t *testing.T) {
+	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	// Pass a non-nil WhatsAppManager so the whatsapp nav item is enabled.
+	s, err := New(nil, nil, nil, a, fakeWhatsAppManager{}, nil, "")
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	vm := whatsAppPageVM{
+		Page: s.page("whatsapp", "darek — whatsapp"),
+	}
+	rec := httptest.NewRecorder()
+	if err := s.render(rec, "whatsapp.html", vm); err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`<footer class="app-footer">`,
+		`href="/whatsapp" class="active"`,
+		`href="/all"`,
+		`<title>darek — whatsapp</title>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q", want)
+		}
+	}
+}
+
+// fakeWhatsAppManager is a minimal stand-in so the whatsapp nav item is
+// enabled in chrome tests. Methods are never called through the handler.
+type fakeWhatsAppManager struct{}
+
+func (fakeWhatsAppManager) PairingState() whatsapp.PairingState              { return whatsapp.PairingState{} }
+func (fakeWhatsAppManager) Groups(context.Context) ([]whatsapp.Group, error) { return nil, nil }
+func (fakeWhatsAppManager) RefreshGroups(context.Context) error              { return nil }
+func (fakeWhatsAppManager) SetIngestEnabled(context.Context, string, bool) error {
+	return nil
+}
+func (fakeWhatsAppManager) Unpair(context.Context) error { return nil }

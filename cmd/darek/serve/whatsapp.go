@@ -11,6 +11,7 @@ import (
 )
 
 type whatsAppPageVM struct {
+	Page   Page
 	State  whatsapp.PairingState
 	Groups []whatsAppGroupVM
 }
@@ -25,7 +26,10 @@ type whatsAppGroupVM struct {
 
 func (s *Server) handleWhatsApp(w http.ResponseWriter, r *http.Request) {
 	state := s.whatsApp.PairingState()
-	vm := whatsAppPageVM{State: state}
+	vm := whatsAppPageVM{
+		Page:  s.page("whatsapp", "darek — whatsapp"),
+		State: state,
+	}
 	if state.Paired {
 		groups, err := s.whatsApp.Groups(r.Context())
 		if err != nil {
@@ -37,7 +41,7 @@ func (s *Server) handleWhatsApp(w http.ResponseWriter, r *http.Request) {
 			vm.Groups = append(vm.Groups, toWhatsAppGroupVM(g))
 		}
 	}
-	if err := s.tmpl.ExecuteTemplate(w, "whatsapp.html", vm); err != nil {
+	if err := s.render(w, "whatsapp.html", vm); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -93,7 +97,7 @@ func (s *Server) handleWhatsAppToggleGroup(w http.ResponseWriter, r *http.Reques
 	}
 	for _, g := range groups {
 		if g.JID == jid {
-			_ = s.tmpl.ExecuteTemplate(w, "_whatsapp_group_row.html", toWhatsAppGroupVM(g))
+			_ = s.renderPartial(w, "_whatsapp_group_row.html", toWhatsAppGroupVM(g))
 			return
 		}
 	}
