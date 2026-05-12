@@ -752,3 +752,85 @@ button.danger:hover {
 .app-footer .muted {
   color: var(--text-faint);
 }
+
+/* executions — waterfall */
+
+.wf { display: flex; flex-direction: column; gap: 2px; margin: 1rem 0; }
+
+.wf-axis-row {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  background: var(--bg, #fff);
+  z-index: 2;
+  padding: 4px 0;
+  border-bottom: 1px dashed var(--border);
+}
+.wf-axis-spacer { /* mirrors the name column on data rows */ }
+.wf-axis { width: 100%; height: 20px; }
+
+.wf-row { background: transparent; }
+.wf-row > summary {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.wf-row > summary::-webkit-details-marker { display: none; }
+.wf-row > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 0.9em;
+  color: var(--text-faint);
+  font-size: 0.8em;
+  transform: translateY(-1px);
+}
+.wf-row[open] > summary::before { content: "▾"; }
+
+.wf-name {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-lane {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wf-lane > svg {
+  width: 100%;
+  height: 22px;
+  background: #f4f0e6;
+  border-radius: 2px;
+}
+.wf-bar-error { stroke: #c25450; stroke-width: 2; }
+.wf-num { font-size: 11px; color: var(--text-dim); min-width: 5em; text-align: right; }
+
+.wf-detail {
+  margin: 4px 0 8px 180px;
+  padding: 6px 8px;
+  border-left: 2px solid var(--border);
+  font-size: 12px;
+}
+.wf-detail > pre {
+  margin: 4px 0;
+  background: #faf7ee;
+  padding: 6px;
+  border-radius: 3px;
+  overflow-x: auto;
+  font-size: 11px;
+}
+.wf-err { color: #c25450; font-weight: 600; margin: 0 0 4px; }
+.wf-row-error > summary .wf-name { color: #c25450; }
+
+.wf-empty { color: var(--text-dim); font-style: italic; margin: 1rem 0; }
