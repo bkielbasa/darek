@@ -886,3 +886,11 @@ dl.summary > dd > code { font-size: 12px; }
   background: var(--surface-2);
   border-radius: 1px;
 }
+
+/* executions — cost cell */
+.exec-cost {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--text-dim);
+}

@@ -17,7 +17,7 @@
 
 <table class="executions">
   <thead>
-    <tr><th>Started</th><th>Kind</th><th>Name</th><th>Duration</th><th>Status</th></tr>
+    <tr><th>Started</th><th>Kind</th><th>Name</th><th>Duration</th><th>Cost</th><th>Status</th></tr>
   </thead>
   <tbody>
     {{range .Rows}}
@@ -31,10 +31,11 @@
         </svg>
         <span>{{.DurationMS}} ms</span>
       </td>
+      <td class="exec-cost">{{.CostUSD}}</td>
       <td>{{.Status}}</td>
     </tr>
     {{else}}
-    <tr><td colspan="5">no executions yet</td></tr>
+    <tr><td colspan="6">no executions yet</td></tr>
     {{end}}
   </tbody>
 </table>

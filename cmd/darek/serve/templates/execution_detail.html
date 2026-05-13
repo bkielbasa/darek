@@ -14,6 +14,10 @@
   <dt>Status</dt><dd>{{.Exec.Status}}</dd>
   {{if .Exec.Error}}<dt>Error</dt><dd class="err">{{.Exec.Error}}</dd>{{end}}
   <dt>Trace ID</dt><dd><code>{{.Exec.TraceID}}</code></dd>
+  {{if .HasLLM}}
+  <dt>Tokens</dt><dd>{{.TokensLine}}</dd>
+  <dt>Cost</dt><dd>{{.CostUSD}}</dd>
+  {{end}}
 </dl>
 
 {{if .JaegerURL}}<p><a href="{{.JaegerURL}}" target="_blank" rel="noopener">Open in Jaeger →</a></p>{{end}}
