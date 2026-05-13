@@ -47,7 +47,8 @@ func (s *Store) List(ctx context.Context, f ListFilter) ([]Execution, error) {
 	}
 	args = append(args, f.Limit)
 	sql := fmt.Sprintf(`
-SELECT id, trace_id, span_id, kind, name, started_at, ended_at, duration_ms, status, COALESCE(error,''), attributes
+SELECT id, trace_id, span_id, kind, name, started_at, ended_at, duration_ms, status, COALESCE(error,''), attributes,
+       total_tokens_in, total_tokens_out, total_tokens_cached, total_cost_usd
 FROM executions
 WHERE 1=1 %s
 ORDER BY started_at DESC
@@ -63,7 +64,8 @@ LIMIT $%d`, where, len(args))
 		var e Execution
 		var attrs []byte
 		if err := rows.Scan(&e.ID, &e.TraceID, &e.SpanID, &e.Kind, &e.Name,
-			&e.StartedAt, &e.EndedAt, &e.DurationMS, &e.Status, &e.Error, &attrs); err != nil {
+			&e.StartedAt, &e.EndedAt, &e.DurationMS, &e.Status, &e.Error, &attrs,
+			&e.TotalTokensIn, &e.TotalTokensOut, &e.TotalTokensCached, &e.TotalCostUSD); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(attrs, &e.Attributes)
@@ -76,10 +78,12 @@ func (s *Store) Get(ctx context.Context, id uuid.UUID) (Execution, []Step, error
 	var e Execution
 	var attrs []byte
 	err := s.pool.QueryRow(ctx, `
-SELECT id, trace_id, span_id, kind, name, started_at, ended_at, duration_ms, status, COALESCE(error,''), attributes
+SELECT id, trace_id, span_id, kind, name, started_at, ended_at, duration_ms, status, COALESCE(error,''), attributes,
+       total_tokens_in, total_tokens_out, total_tokens_cached, total_cost_usd
 FROM executions WHERE id = $1`, id).
 		Scan(&e.ID, &e.TraceID, &e.SpanID, &e.Kind, &e.Name,
-			&e.StartedAt, &e.EndedAt, &e.DurationMS, &e.Status, &e.Error, &attrs)
+			&e.StartedAt, &e.EndedAt, &e.DurationMS, &e.Status, &e.Error, &attrs,
+			&e.TotalTokensIn, &e.TotalTokensOut, &e.TotalTokensCached, &e.TotalCostUSD)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Execution{}, nil, ErrNotFound
 	}

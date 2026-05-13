@@ -22,17 +22,21 @@ const KindAttribute = "darek.execution.kind"
 
 // Execution is the row type returned by Store.List / Store.Get.
 type Execution struct {
-	ID         uuid.UUID
-	TraceID    string
-	SpanID     string
-	Kind       string
-	Name       string
-	StartedAt  time.Time
-	EndedAt    time.Time
-	DurationMS int64
-	Status     string // "ok" | "error"
-	Error      string
-	Attributes map[string]any
+	ID                uuid.UUID
+	TraceID           string
+	SpanID            string
+	Kind              string
+	Name              string
+	StartedAt         time.Time
+	EndedAt           time.Time
+	DurationMS        int64
+	Status            string // "ok" | "error"
+	Error             string
+	Attributes        map[string]any
+	TotalTokensIn     int64
+	TotalTokensOut    int64
+	TotalTokensCached int64
+	TotalCostUSD      float64
 }
 
 // Step is the row type for a single execution_steps row.
