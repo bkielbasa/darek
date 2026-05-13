@@ -25,6 +25,7 @@ type executionRowVM struct {
 	Color      string // hex; from kindColor()
 	Status     string
 	IsError    bool
+	CostUSD    string // formatted via formatUSD when > 0, "" when 0
 }
 
 type executionsListVM struct {
@@ -68,6 +69,10 @@ type executionDetailVM struct {
 	Ticks      []tickVM
 	JaegerURL  string
 	Disabled   bool
+
+	HasLLM     bool   // any of TotalTokensIn/Out/Cached on Exec is > 0
+	TokensLine string // formatted via formatTokensLine
+	CostUSD    string // formatted via formatUSD; empty when no LLM activity
 }
 
 func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +143,13 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	hasLLM := exec.TotalTokensIn > 0 || exec.TotalTokensOut > 0 || exec.TotalTokensCached > 0
+	tokensLine := ""
+	costStr := ""
+	if hasLLM {
+		tokensLine = formatTokensLine(exec.TotalTokensIn, exec.TotalTokensOut, exec.TotalTokensCached)
+		costStr = formatUSD(exec.TotalCostUSD)
+	}
 	vm := executionDetailVM{
 		Page:       s.page("executions", "execution · darek"),
 		Exec:       exec,
@@ -146,6 +158,9 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 		Attributes: exec.Attributes,
 		Steps:      buildStepVMs(exec, steps),
 		Ticks:      buildTicks(exec.DurationMS),
+		HasLLM:     hasLLM,
+		TokensLine: tokensLine,
+		CostUSD:    costStr,
 	}
 	if s.jaegerURL != "" {
 		vm.JaegerURL = fmt.Sprintf("%s/trace/%s", s.jaegerURL, exec.TraceID)
@@ -256,6 +271,27 @@ func formatMS(ms int64) string {
 	return fmt.Sprintf("%dm %ds", minutes, seconds)
 }
 
+// formatUSD renders a USD amount for display.
+//   - < $1.00 → 4 decimal places ("$0.0123") so micro-costs aren't lost.
+//   - ≥ $1.00 → 2 decimal places ("$12.50").
+func formatUSD(usd float64) string {
+	if usd < 1.0 {
+		return fmt.Sprintf("$%.4f", usd)
+	}
+	return fmt.Sprintf("$%.2f", usd)
+}
+
+// formatTokensLine renders the per-execution tokens summary for the
+// detail page. Cached chunk is omitted when zero so the common case
+// stays compact. Caller is responsible for gating on hasLLM — this
+// function does no gating itself.
+func formatTokensLine(in, out, cached int64) string {
+	if cached > 0 {
+		return fmt.Sprintf("%d in · %d out · %d cached", in, out, cached)
+	}
+	return fmt.Sprintf("%d in · %d out", in, out)
+}
+
 // buildStepVMs converts persisted steps into the view-model the waterfall
 // template renders. Pure: no DB, no clock — given equal inputs it returns
 // equal outputs. OffsetPct/WidthPct are in tenths of a percent (0..1000)
@@ -349,6 +385,10 @@ func buildExecutionRowVMs(rows []exechistory.Execution) ([]executionRowVM, int64
 		if max > 0 {
 			width = int(e.DurationMS * 1000 / max)
 		}
+		costStr := ""
+		if e.TotalCostUSD > 0 {
+			costStr = formatUSD(e.TotalCostUSD)
+		}
 		out = append(out, executionRowVM{
 			ID:         e.ID.String(),
 			Kind:       e.Kind,
@@ -359,6 +399,7 @@ func buildExecutionRowVMs(rows []exechistory.Execution) ([]executionRowVM, int64
 			Color:      kindColor(e.Kind),
 			Status:     e.Status,
 			IsError:    e.Status == "error",
+			CostUSD:    costStr,
 		})
 	}
 	return out, max

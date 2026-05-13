@@ -290,3 +290,49 @@ func TestBuildExecutionRowVMs_ErrorStatus(t *testing.T) {
 		t.Error("IsError = false, want true")
 	}
 }
+
+func TestFormatUSD(t *testing.T) {
+	tests := []struct {
+		usd  float64
+		want string
+	}{
+		{0.0, "$0.0000"},
+		{0.0001, "$0.0001"},
+		{0.0123, "$0.0123"},
+		{0.99999, "$1.0000"}, // %.4f rounds up to 1.0000
+		{1.0, "$1.00"},
+		{12.5, "$12.50"},
+		{100.499, "$100.50"},
+	}
+	for _, tc := range tests {
+		if got := formatUSD(tc.usd); got != tc.want {
+			t.Errorf("formatUSD(%g) = %q, want %q", tc.usd, got, tc.want)
+		}
+	}
+}
+
+func TestFormatTokensLine(t *testing.T) {
+	if got := formatTokensLine(100, 50, 0); got != "100 in · 50 out" {
+		t.Errorf("got %q, want \"100 in · 50 out\"", got)
+	}
+	if got := formatTokensLine(100, 50, 10); got != "100 in · 50 out · 10 cached" {
+		t.Errorf("got %q, want \"100 in · 50 out · 10 cached\"", got)
+	}
+	if got := formatTokensLine(0, 0, 0); got != "0 in · 0 out" {
+		t.Errorf("zero case: got %q", got)
+	}
+}
+
+func TestBuildExecutionRowVMs_CostString(t *testing.T) {
+	rows := []exechistory.Execution{
+		{ID: uuid.New(), Kind: "sync", DurationMS: 100, Status: "ok", TotalCostUSD: 0},
+		{ID: uuid.New(), Kind: "sync", DurationMS: 100, Status: "ok", TotalCostUSD: 0.0123},
+	}
+	vms, _ := buildExecutionRowVMs(rows)
+	if vms[0].CostUSD != "" {
+		t.Errorf("rows[0].CostUSD = %q, want empty", vms[0].CostUSD)
+	}
+	if vms[1].CostUSD != "$0.0123" {
+		t.Errorf("rows[1].CostUSD = %q, want $0.0123", vms[1].CostUSD)
+	}
+}
