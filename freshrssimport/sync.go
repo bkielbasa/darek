@@ -15,6 +15,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -120,10 +121,25 @@ type articleOutcome struct {
 // processArticle runs the ingest/mark-read pipeline for a single article and
 // returns its outcome. Pure function over (ctx, fr, store, a); safe to call
 // concurrently for distinct articles.
+//
+// Wrapped in a freshrssimport.process_article span (tracer scope "darek/
+// freshrssimport") so it shows up in the executions waterfall — child
+// spans from freshrss.Mark, links.IngestOne, and any LLM analyze callback
+// nest underneath.
 func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshrss.Article, onVideoIngested OnVideoIngestedFunc) articleOutcome {
-	if a.URL == "" {
+	ctx, span := tracer.Start(ctx, "freshrssimport.process_article",
+		trace.WithAttributes(
+			attribute.String("article.id", a.ID),
+		),
+	)
+	defer span.End()
+
+	if a.URL != "" {
+		span.SetAttributes(attribute.String("article.url", truncArticleURL(a.URL)))
+	} else {
 		return articleOutcome{Skipped: true}
 	}
+
 	id, isNew, kind, err := links.IngestOne(ctx, store, links.Candidate{
 		URL:     a.URL,
 		Title:   a.Title,
@@ -132,8 +148,14 @@ func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshr
 		Summary: a.Summary,
 	})
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return articleOutcome{Err: fmt.Errorf("ingest %s: %w", a.ID, err)}
 	}
+	span.SetAttributes(
+		attribute.String("article.kind", kind),
+		attribute.Bool("article.is_new", isNew),
+	)
 
 	o := articleOutcome{Imported: true}
 	if err := fr.Mark(ctx, a.ID, freshrss.ActionMarkRead); err != nil {
@@ -151,7 +173,24 @@ func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshr
 			}
 		}
 	}
+
+	span.SetAttributes(attribute.Bool("article.imported", o.Imported))
+	if o.Err != nil {
+		span.RecordError(o.Err)
+		span.SetStatus(codes.Error, o.Err.Error())
+	}
 	return o
+}
+
+// truncArticleURL caps a URL at 256 bytes for safe use as a span attribute.
+// Mirrors links.truncURL but lives here to avoid an inter-package dependency
+// for a 4-line helper.
+func truncArticleURL(s string) string {
+	const max = 256
+	if len(s) <= max {
+		return s
+	}
+	return s[:max]
 }
 
 func recordDuration(ctx context.Context, start time.Time, outcome string) {
