@@ -129,6 +129,26 @@ func TestHandleWhatsApp_ToggleFlipsAndReturnsRow(t *testing.T) {
 	require.Contains(t, body, "checked")
 }
 
+// hx-target must be a relative selector (e.g. "closest tr") rather than
+// "#wa-row-<jid>", because JIDs contain "@" and "." — both illegal in a
+// CSS id selector. With a #-selector, htmx throws SyntaxError when
+// resolving the target and silently aborts the request, so clicking the
+// checkbox does nothing in the browser. This test guards against the
+// regression.
+func TestWhatsApp_GroupRowTargetIsRelative(t *testing.T) {
+	wa := &fakeWA{
+		state:  whatsapp.PairingState{Paired: true},
+		groups: []whatsapp.Group{{JID: "g1@g.us", Name: "G1"}},
+	}
+	s := newTestServerWithWA(t, wa)
+	resp := authedRequest(t, s, "GET", "/whatsapp", "")
+	body := readBody(t, resp)
+	require.Contains(t, body, `hx-target="closest tr"`,
+		"group-row checkbox must use a relative target; a #-selector containing the JID is invalid CSS")
+	require.NotContains(t, body, `hx-target="#wa-row-`,
+		"the legacy #-selector form contains @ and . which CSS cannot parse")
+}
+
 func TestHandleWhatsApp_UnauthRedirects(t *testing.T) {
 	wa := &fakeWA{state: whatsapp.PairingState{Paired: true}}
 	s := newTestServerWithWA(t, wa)

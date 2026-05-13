@@ -3,7 +3,7 @@
   <td>
     <input type="checkbox" name="enabled" value="1" {{if .IngestEnabled}}checked{{end}}
            hx-post="/whatsapp/groups/{{.JID}}/toggle"
-           hx-target="#wa-row-{{.JID}}"
+           hx-target="closest tr"
            hx-swap="outerHTML"
            hx-trigger="change">
   </td>
