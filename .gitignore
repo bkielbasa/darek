@@ -7,6 +7,9 @@ secrets.env
 .darek/
 *.local.yaml
 
+# Brainstorm-skill session artifacts (mockup HTML, server state)
+.superpowers/
+
 # Test artifacts
 *.out
 coverage.txt
