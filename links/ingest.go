@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
 )
 
@@ -25,36 +26,64 @@ type Candidate struct {
 // store. Returns the resulting link id, whether it was a brand-new row, and
 // the resolved kind.
 //
+// Wrapped in a links.ingest_one span (tracer scope "darek/links"). The two
+// DB operations underneath get their own child spans (links.lookup,
+// links.save) so the executions waterfall shows where DB time is spent.
+//
 // On metrics failure, ingestion proceeds without recording (matches the
 // "instrumentation never blocks real work" contract).
 func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool, string, error) {
+	ctx, span := tracer.Start(ctx, "links.ingest_one")
+	defer span.End()
+	span.SetAttributes(
+		attribute.String("link.source", normalizeSource(c.Source)),
+		attribute.String("link.url_raw", truncURL(c.URL)),
+	)
+
 	if store == nil {
-		return uuid.Nil, false, "", errors.New("links.IngestOne: store is required")
+		err := errors.New("links.IngestOne: store is required")
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return uuid.Nil, false, "", err
 	}
 	canon := Canonicalize(c.URL)
 	if canon == "" {
-		return uuid.Nil, false, "", fmt.Errorf("links.IngestOne: unparseable url %q", c.URL)
+		err := fmt.Errorf("links.IngestOne: unparseable url %q", c.URL)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+		return uuid.Nil, false, "", err
 	}
+	span.SetAttributes(attribute.String("link.url", truncURL(canon)))
 
 	kind := c.Kind
 	if kind == "" {
 		kind = Classify(canon)
 	}
+	span.SetAttributes(attribute.String("link.kind", kind))
 
-	// Detect new vs upsert by checking pre-existence (cheap; the existing Save
-	// already does this internally but doesn't surface the answer).
+	// Lookup is the existence check. Wrap it in its own span so the
+	// waterfall shows where DB time is spent for this article.
 	isNew := false
 	{
+		lookupCtx, lookupSpan := tracer.Start(ctx, "links.lookup")
 		var existingID uuid.UUID
-		err := store.pool.QueryRow(ctx, `SELECT id FROM links WHERE url = $1`, canon).Scan(&existingID)
+		err := store.pool.QueryRow(lookupCtx, `SELECT id FROM links WHERE url = $1`, canon).Scan(&existingID)
 		if errors.Is(err, ErrNoRows()) {
 			isNew = true
 		} else if err != nil {
+			lookupSpan.RecordError(err)
+			lookupSpan.SetStatus(codes.Error, err.Error())
+			lookupSpan.End()
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 			return uuid.Nil, false, "", fmt.Errorf("links.IngestOne lookup: %w", err)
 		}
+		lookupSpan.End()
 	}
+	span.SetAttributes(attribute.Bool("link.is_new", isNew))
 
-	id, err := store.Save(ctx, SaveInput{
+	saveCtx, saveSpan := tracer.Start(ctx, "links.save")
+	id, err := store.Save(saveCtx, SaveInput{
 		URL:     canon,
 		Title:   c.Title,
 		Source:  c.Source,
@@ -63,7 +92,9 @@ func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool,
 		Summary: StripHTML(c.Summary),
 	})
 	if err != nil {
-		// Best-effort outcome=error counter.
+		saveSpan.RecordError(err)
+		saveSpan.SetStatus(codes.Error, err.Error())
+		saveSpan.End()
 		if store.m != nil {
 			store.m.LinksIngest.Add(ctx, 1, metric.WithAttributes(
 				attribute.String("source", normalizeSource(c.Source)),
@@ -71,8 +102,11 @@ func IngestOne(ctx context.Context, store *Store, c Candidate) (uuid.UUID, bool,
 				attribute.String("outcome", "error"),
 			))
 		}
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		return uuid.Nil, false, kind, err
 	}
+	saveSpan.End()
 	if store.m != nil {
 		store.m.LinksIngest.Add(ctx, 1, metric.WithAttributes(
 			attribute.String("source", normalizeSource(c.Source)),
