@@ -12,6 +12,7 @@ import (
 	"github.com/openai/openai-go/option"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Client struct {
@@ -66,7 +67,24 @@ func (cl *Client) Chat(ctx context.Context, params openai.ChatCompletionNewParam
 	depErr := obs.Dep(ctx, "openai_chat", "chat", func(ctx context.Context) error {
 		var err error
 		resp, err = cl.c.Chat.Completions.New(ctx, params)
-		return err
+		if err != nil {
+			return err
+		}
+		// Attach token + cost numbers to the span while it's still open
+		// (obs.Dep ends the span when this fn returns). The same numbers
+		// are recorded as metrics below.
+		in := int(resp.Usage.PromptTokens)
+		out := int(resp.Usage.CompletionTokens)
+		cached := int(resp.Usage.PromptTokensDetails.CachedTokens)
+		cost := Cost(cl.model, in, out, cached)
+		trace.SpanFromContext(ctx).SetAttributes(
+			attribute.String("llm.model", cl.model),
+			attribute.Int64("llm.tokens_input", int64(in)),
+			attribute.Int64("llm.tokens_output", int64(out)),
+			attribute.Int64("llm.tokens_cached", int64(cached)),
+			attribute.Float64("llm.cost_usd", cost),
+		)
+		return nil
 	})
 	dur := time.Since(start).Seconds()
 
