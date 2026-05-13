@@ -10,6 +10,7 @@ import (
 // Supported schemes:
 //   - "env:NAME"  → value of $NAME
 //   - "NAME"      → shorthand for env:NAME
+//
 // Reserved for later: "keyring:..." (returns ErrUnsupportedScheme today).
 func ResolveSecret(ref string) (string, error) {
 	if ref == "" {
