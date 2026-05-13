@@ -41,17 +41,21 @@ func executionKind(s sdktrace.ReadOnlySpan) (string, bool) {
 }
 
 type executionRow struct {
-	ID         uuid.UUID
-	TraceID    string
-	SpanID     string
-	Kind       string
-	Name       string
-	StartedAt  time.Time
-	EndedAt    time.Time
-	DurationMS int64
-	Status     string
-	Error      string
-	Attributes []byte // JSON-encoded
+	ID                uuid.UUID
+	TraceID           string
+	SpanID            string
+	Kind              string
+	Name              string
+	StartedAt         time.Time
+	EndedAt           time.Time
+	DurationMS        int64
+	Status            string
+	Error             string
+	Attributes        []byte // JSON-encoded
+	TotalTokensIn     int64
+	TotalTokensOut    int64
+	TotalTokensCached int64
+	TotalCostUSD      float64
 }
 
 type stepRow struct {
@@ -68,7 +72,7 @@ type stepRow struct {
 	Events       []byte // JSON-encoded
 }
 
-func spanToExecutionRow(s sdktrace.ReadOnlySpan) (executionRow, error) {
+func spanToExecutionRow(s sdktrace.ReadOnlySpan, totals llmTotals) (executionRow, error) {
 	kind, _ := executionKind(s)
 	attrs := filterAttributes(s.Attributes())
 	attrsJSON, err := json.Marshal(attrs)
@@ -82,17 +86,21 @@ func spanToExecutionRow(s sdktrace.ReadOnlySpan) (executionRow, error) {
 		errMsg = s.Status().Description
 	}
 	return executionRow{
-		ID:         uuid.New(),
-		TraceID:    s.SpanContext().TraceID().String(),
-		SpanID:     s.SpanContext().SpanID().String(),
-		Kind:       kind,
-		Name:       s.Name(),
-		StartedAt:  s.StartTime(),
-		EndedAt:    s.EndTime(),
-		DurationMS: durationMS(s),
-		Status:     status,
-		Error:      errMsg,
-		Attributes: attrsJSON,
+		ID:                uuid.New(),
+		TraceID:           s.SpanContext().TraceID().String(),
+		SpanID:            s.SpanContext().SpanID().String(),
+		Kind:              kind,
+		Name:              s.Name(),
+		StartedAt:         s.StartTime(),
+		EndedAt:           s.EndTime(),
+		DurationMS:        durationMS(s),
+		Status:            status,
+		Error:             errMsg,
+		Attributes:        attrsJSON,
+		TotalTokensIn:     totals.TokensIn,
+		TotalTokensOut:    totals.TokensOut,
+		TotalTokensCached: totals.TokensCached,
+		TotalCostUSD:      totals.CostUSD,
 	}, nil
 }
 
@@ -202,5 +210,61 @@ func attributeValue(v attribute.Value) any {
 		return v.AsStringSlice()
 	default:
 		return v.Emit()
+	}
+}
+
+// llmTotals aggregates LLM-usage counts across the buffered step rows of a
+// single execution. Populated by sumLLMTotals at flush time and stored in
+// the executions row's new columns.
+type llmTotals struct {
+	TokensIn     int64
+	TokensOut    int64
+	TokensCached int64
+	CostUSD      float64
+}
+
+// sumLLMTotals walks step rows for one execution and sums the llm.* numeric
+// attributes. Rows without those attributes contribute zero. Pure: no DB,
+// no clock — given equal inputs it returns equal outputs.
+func sumLLMTotals(steps []stepRow) llmTotals {
+	var out llmTotals
+	for _, s := range steps {
+		if len(s.Attributes) == 0 {
+			continue
+		}
+		var m map[string]any
+		if err := json.Unmarshal(s.Attributes, &m); err != nil {
+			continue
+		}
+		out.TokensIn += attrInt64(m, "llm.tokens_input")
+		out.TokensOut += attrInt64(m, "llm.tokens_output")
+		out.TokensCached += attrInt64(m, "llm.tokens_cached")
+		out.CostUSD += attrFloat64(m, "llm.cost_usd")
+	}
+	return out
+}
+
+// attrInt64 reads a numeric attribute from an unmarshaled JSON map. Numbers
+// come back as float64 from encoding/json by default; we accept either kind
+// defensively in case a caller constructs the map with typed integers.
+func attrInt64(m map[string]any, k string) int64 {
+	switch v := m[k].(type) {
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	default:
+		return 0
+	}
+}
+
+func attrFloat64(m map[string]any, k string) float64 {
+	switch v := m[k].(type) {
+	case float64:
+		return v
+	case int64:
+		return float64(v)
+	default:
+		return 0
 	}
 }

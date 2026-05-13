@@ -40,7 +40,7 @@ func TestSpanToExecutionRow_BasicMapping(t *testing.T) {
 		)
 	})
 
-	row, err := spanToExecutionRow(s)
+	row, err := spanToExecutionRow(s, llmTotals{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestSpanToExecutionRow_ErrorStatus(t *testing.T) {
 		span.SetAttributes(attribute.String(KindAttribute, "freshrss-sync"))
 		span.SetStatus(codes.Error, "boom")
 	})
-	row, err := spanToExecutionRow(s)
+	row, err := spanToExecutionRow(s, llmTotals{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,5 +141,73 @@ func int64FromAny(v any) int64 {
 		return int64(x)
 	default:
 		return 0
+	}
+}
+
+func TestSumLLMTotals(t *testing.T) {
+	mk := func(attrs map[string]any) stepRow {
+		j, err := json.Marshal(attrs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return stepRow{Attributes: j}
+	}
+	llmStep := func(in, out, cached int64, costUSD float64) stepRow {
+		return mk(map[string]any{
+			"llm.tokens_input":  in,
+			"llm.tokens_output": out,
+			"llm.tokens_cached": cached,
+			"llm.cost_usd":      costUSD,
+		})
+	}
+
+	tests := []struct {
+		name  string
+		steps []stepRow
+		want  llmTotals
+	}{
+		{
+			name: "empty",
+		},
+		{
+			name:  "single LLM step",
+			steps: []stepRow{llmStep(100, 50, 10, 0.0012)},
+			want:  llmTotals{TokensIn: 100, TokensOut: 50, TokensCached: 10, CostUSD: 0.0012},
+		},
+		{
+			name: "LLM + non-LLM",
+			steps: []stepRow{
+				llmStep(200, 75, 0, 0.0010),
+				mk(map[string]any{"http.status": int64(200)}), // ignored
+			},
+			want: llmTotals{TokensIn: 200, TokensOut: 75, CostUSD: 0.0010},
+		},
+		{
+			name: "multiple LLM steps are additive",
+			steps: []stepRow{
+				llmStep(100, 50, 10, 0.0012),
+				llmStep(200, 75, 0, 0.0010),
+				llmStep(50, 25, 5, 0.0003),
+			},
+			want: llmTotals{TokensIn: 350, TokensOut: 150, TokensCached: 15, CostUSD: 0.0025},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sumLLMTotals(tc.steps)
+			if got.TokensIn != tc.want.TokensIn {
+				t.Errorf("TokensIn = %d, want %d", got.TokensIn, tc.want.TokensIn)
+			}
+			if got.TokensOut != tc.want.TokensOut {
+				t.Errorf("TokensOut = %d, want %d", got.TokensOut, tc.want.TokensOut)
+			}
+			if got.TokensCached != tc.want.TokensCached {
+				t.Errorf("TokensCached = %d, want %d", got.TokensCached, tc.want.TokensCached)
+			}
+			diff := got.CostUSD - tc.want.CostUSD
+			if diff < -1e-9 || diff > 1e-9 {
+				t.Errorf("CostUSD = %.10f, want %.10f", got.CostUSD, tc.want.CostUSD)
+			}
+		})
 	}
 }

@@ -70,17 +70,18 @@ func (r *Recorder) bufferStep(s sdktrace.ReadOnlySpan) {
 }
 
 func (r *Recorder) flushExecution(s sdktrace.ReadOnlySpan) {
-	execRow, err := spanToExecutionRow(s)
-	if err != nil {
-		r.log.Warn("exechistory: map execution", "err", err)
-		return
-	}
-
 	r.mu.Lock()
 	tid := s.SpanContext().TraceID()
 	steps := r.pending[tid]
 	delete(r.pending, tid)
 	r.mu.Unlock()
+
+	totals := sumLLMTotals(steps)
+	execRow, err := spanToExecutionRow(s, totals)
+	if err != nil {
+		r.log.Warn("exechistory: map execution", "err", err)
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -98,11 +99,13 @@ func (r *Recorder) writeAll(ctx context.Context, exec executionRow, steps []step
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `
-INSERT INTO executions (id, trace_id, span_id, kind, name, started_at, ended_at, duration_ms, status, error, attributes)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NULLIF($10,''), $11)`,
+INSERT INTO executions (id, trace_id, span_id, kind, name, started_at, ended_at, duration_ms, status, error, attributes,
+                        total_tokens_in, total_tokens_out, total_tokens_cached, total_cost_usd)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9, NULLIF($10,''), $11, $12, $13, $14, $15)`,
 		exec.ID, exec.TraceID, exec.SpanID, exec.Kind, exec.Name,
 		exec.StartedAt, exec.EndedAt, exec.DurationMS,
-		exec.Status, exec.Error, exec.Attributes); err != nil {
+		exec.Status, exec.Error, exec.Attributes,
+		exec.TotalTokensIn, exec.TotalTokensOut, exec.TotalTokensCached, exec.TotalCostUSD); err != nil {
 		return err
 	}
 
