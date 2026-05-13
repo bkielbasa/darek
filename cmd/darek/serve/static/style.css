@@ -753,6 +753,26 @@ button.danger:hover {
   color: var(--text-faint);
 }
 
+/* executions — detail summary (compact label/value pairs) */
+
+dl.summary {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 2px 12px;
+  margin: 0.5rem 0 1rem;
+  font-size: 13px;
+}
+dl.summary > dt {
+  color: var(--text-dim);
+  margin: 0;
+}
+dl.summary > dd {
+  margin: 0;
+  color: var(--text);
+}
+dl.summary > dd.err { color: #c25450; }
+dl.summary > dd > code { font-size: 12px; }
+
 /* executions — waterfall */
 
 .wf { display: flex; flex-direction: column; gap: 2px; margin: 1rem 0; }
