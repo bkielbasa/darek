@@ -330,5 +330,4 @@ All MVP plans (foundations, calendars, todoist, mail receive, mail send) plus ca
 - CalDAV / Outlook calendar sources behind the existing `CalendarSource` / `WritableCalendarSource` interfaces
 - Series-level recurring edits and recurrence rules (`RRULE`) on calendar create/update
 - Mail HTML body rendering and a "deep search" tool that fetches bodies for top-K candidates
-- LLM-augmented digest variant that summarizes the day rather than listing it
 - ActualBudget integration (deferred from MVP)
