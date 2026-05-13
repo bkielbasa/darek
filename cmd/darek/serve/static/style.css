@@ -826,7 +826,7 @@ button.danger:hover {
 .wf-lane > svg {
   width: 100%;
   height: 22px;
-  background: #f4f0e6;
+  background: var(--surface-2);
   border-radius: 2px;
 }
 .wf-bar-error { stroke: #c25450; stroke-width: 2; }
@@ -840,7 +840,8 @@ button.danger:hover {
 }
 .wf-detail > pre {
   margin: 4px 0;
-  background: #faf7ee;
+  background: var(--surface);
+  color: var(--text);
   padding: 6px;
   border-radius: 3px;
   overflow-x: auto;
@@ -862,6 +863,6 @@ button.danger:hover {
   height: 6px;
   margin-right: 6px;
   vertical-align: middle;
-  background: #f4f0e6;
+  background: var(--surface-2);
   border-radius: 1px;
 }
