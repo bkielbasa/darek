@@ -50,11 +50,9 @@ func run() error {
 		return runBlog(ctx, cfgPath, args)
 	case "serve":
 		return runServe(ctx, cfgPath)
-	case "auth":
-		return runAuth(ctx, args, os.Stdout)
 	case "", "chat":
 		return runChat(ctx, cfgPath, strings.Join(args, " "))
 	default:
-		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar, mail, freshrss, todoist, blog, serve, auth)", cmd)
+		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar, mail, freshrss, todoist, blog, serve)", cmd)
 	}
 }
