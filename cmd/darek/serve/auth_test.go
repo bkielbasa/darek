@@ -148,3 +148,14 @@ func TestRequireAuth_PassesValidCookie(t *testing.T) {
 	// Rolling expiry: a refreshed cookie was set on the response
 	require.NotEmpty(t, w.Result().Cookies(), "expected refreshed cookie")
 }
+
+func TestLoginTemplate_RendersErrorBanner(t *testing.T) {
+	s := newAuthedServer(t)
+	s.mux.HandleFunc("GET /login", s.handleOIDCLogin)
+	req := httptest.NewRequest("GET", "/login?error=forbidden", nil)
+	w := httptest.NewRecorder()
+	s.Handler().ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "Sign in with Authentik")
+	require.Contains(t, w.Body.String(), "darek-users")
+}
