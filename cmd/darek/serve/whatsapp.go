@@ -27,7 +27,7 @@ type whatsAppGroupVM struct {
 func (s *Server) handleWhatsApp(w http.ResponseWriter, r *http.Request) {
 	state := s.whatsApp.PairingState()
 	vm := whatsAppPageVM{
-		Page:  s.page("whatsapp", "darek — whatsapp"),
+		Page:  s.page(r.Context(), "whatsapp", "darek — whatsapp"),
 		State: state,
 	}
 	if state.Paired {

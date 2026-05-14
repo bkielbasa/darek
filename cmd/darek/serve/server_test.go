@@ -12,8 +12,6 @@ import (
 func dummyAuth(t *testing.T) serve.AuthConfig {
 	t.Helper()
 	a, err := serve.NewAuthConfig(
-		"test",
-		[]byte("placeholder-hash"),
 		bytes.Repeat([]byte{0}, 32),
 		time.Hour,
 	)
@@ -24,7 +22,7 @@ func dummyAuth(t *testing.T) serve.AuthConfig {
 }
 
 func TestServer_Healthz(t *testing.T) {
-	s, err := serve.New(nil, nil, nil, dummyAuth(t), nil, nil, "")
+	s, err := serve.New(nil, nil, nil, dummyAuth(t), &serve.OIDC{}, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -40,7 +38,7 @@ func TestServer_Healthz(t *testing.T) {
 }
 
 func TestServer_StaticCSS(t *testing.T) {
-	s, err := serve.New(nil, nil, nil, dummyAuth(t), nil, nil, "")
+	s, err := serve.New(nil, nil, nil, dummyAuth(t), &serve.OIDC{}, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}

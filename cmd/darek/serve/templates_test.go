@@ -75,14 +75,14 @@ func TestParseTemplateBundle(t *testing.T) {
 }
 
 func TestIndexRendersWithChrome(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
-	s, err := New(nil, nil, nil, a, nil, nil, "")
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, &OIDC{}, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
 	rec := httptest.NewRecorder()
 	vm := indexVM{
-		Page:    s.page("queue", "darek — queue"),
+		Page:    s.page(context.Background(), "queue", "darek — queue"),
 		Path:    "/",
 		Kinds:   []string{"article"},
 		Ratings: []int{1, 2, 3, 4, 5},
@@ -107,13 +107,13 @@ func TestIndexRendersWithChrome(t *testing.T) {
 }
 
 func TestExecutionsListRendersWithChrome(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
-	s, err := New(nil, nil, nil, a, nil, nil, "")
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, &OIDC{}, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
 	vm := executionsListVM{
-		Page:     s.page("executions", "executions · darek"),
+		Page:     s.page(context.Background(), "executions", "executions · darek"),
 		Disabled: true,
 	}
 	rec := httptest.NewRecorder()
@@ -134,13 +134,13 @@ func TestExecutionsListRendersWithChrome(t *testing.T) {
 }
 
 func TestExecutionDetailRendersWithChrome(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
-	s, err := New(nil, nil, nil, a, nil, nil, "")
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, &OIDC{}, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
 	vm := executionDetailVM{
-		Page:     s.page("executions", "execution · darek"),
+		Page:     s.page(context.Background(), "executions", "execution · darek"),
 		Disabled: true,
 	}
 	rec := httptest.NewRecorder()
@@ -161,14 +161,14 @@ func TestExecutionDetailRendersWithChrome(t *testing.T) {
 }
 
 func TestWhatsAppRendersWithChrome(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
 	// Pass a non-nil WhatsAppManager so the whatsapp nav item is enabled.
-	s, err := New(nil, nil, nil, a, fakeWhatsAppManager{}, nil, "")
+	s, err := New(nil, nil, nil, a, &OIDC{}, fakeWhatsAppManager{}, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
 	vm := whatsAppPageVM{
-		Page: s.page("whatsapp", "darek — whatsapp"),
+		Page: s.page(context.Background(), "whatsapp", "darek — whatsapp"),
 	}
 	rec := httptest.NewRecorder()
 	if err := s.render(rec, "whatsapp.html", vm); err != nil {
@@ -200,9 +200,9 @@ func (fakeWhatsAppManager) SetIngestEnabled(context.Context, string, bool) error
 func (fakeWhatsAppManager) Unpair(context.Context) error { return nil }
 
 func TestNavItemsAreRoutable(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
 	// Server with every feature wired so all nav items are enabled.
-	s, err := New(nil, nil, nil, a, fakeWhatsAppManager{}, &exechistory.Store{}, "")
+	s, err := New(nil, nil, nil, a, &OIDC{}, fakeWhatsAppManager{}, &exechistory.Store{}, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}

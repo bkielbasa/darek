@@ -4,8 +4,10 @@ go 1.25.0
 
 require (
 	github.com/arran4/golang-ical v0.3.5
+	github.com/coreos/go-oidc/v3 v3.18.0
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
 	github.com/exaring/otelpgx v0.10.0
+	github.com/go-jose/go-jose/v3 v3.0.5
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
@@ -63,6 +65,7 @@ require (
 	github.com/emersion/go-message v0.18.2 // indirect
 	github.com/emersion/go-sasl v0.0.0-20241020182733-b788ff22d5a6 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect

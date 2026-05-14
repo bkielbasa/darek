@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"strings"
 	"time"
 
@@ -81,6 +82,21 @@ func runDoctor(ctx context.Context, cfgPath string) error {
 		add("otel exporter reachable", err, cfg.OTEL.ExporterEndpoint)
 		if err == nil {
 			conn.Close()
+		}
+		if cfg.Auth.Issuer != "" {
+			client := &http.Client{Timeout: 5 * time.Second}
+			urlStr := strings.TrimRight(cfg.Auth.Issuer, "/") + "/.well-known/openid-configuration"
+			resp, dErr := client.Get(urlStr)
+			if dErr == nil {
+				resp.Body.Close()
+				if resp.StatusCode == 200 {
+					add("oidc discovery", nil, "ok")
+				} else {
+					add("oidc discovery", fmt.Errorf("status %d", resp.StatusCode), "")
+				}
+			} else {
+				add("oidc discovery", dErr, "")
+			}
 		}
 		if cfg.BlogMarketing.FeedURL != "" {
 			feed, err := blogfeed.New(blogfeed.Options{URL: cfg.BlogMarketing.FeedURL, Timeout: 5 * time.Second})

@@ -78,7 +78,7 @@ type executionDetailVM struct {
 func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
 	if s.executions == nil {
 		_ = s.render(w, "executions_list.html", executionsListVM{
-			Page:     s.page("executions", "executions · darek"),
+			Page:     s.page(r.Context(), "executions", "executions · darek"),
 			Disabled: true,
 		})
 		return
@@ -107,7 +107,7 @@ func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
 	}
 	rowVMs, maxDur := buildExecutionRowVMs(rows)
 	vm := executionsListVM{
-		Page:          s.page("executions", "executions · darek"),
+		Page:          s.page(r.Context(), "executions", "executions · darek"),
 		Kinds:         kinds,
 		Kind:          f.Kind,
 		Rows:          rowVMs,
@@ -124,7 +124,7 @@ func (s *Server) handleExecutionsList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 	if s.executions == nil {
 		_ = s.render(w, "execution_detail.html", executionDetailVM{
-			Page:     s.page("executions", "execution · darek"),
+			Page:     s.page(r.Context(), "executions", "execution · darek"),
 			Disabled: true,
 		})
 		return
@@ -151,7 +151,7 @@ func (s *Server) handleExecutionDetail(w http.ResponseWriter, r *http.Request) {
 		costStr = formatUSD(exec.TotalCostUSD)
 	}
 	vm := executionDetailVM{
-		Page:       s.page("executions", "execution · darek"),
+		Page:       s.page(r.Context(), "executions", "execution · darek"),
 		Exec:       exec,
 		StartedAt:  exec.StartedAt.Format("2006-01-02 15:04:05.000"),
 		EndedAt:    exec.EndedAt.Format("2006-01-02 15:04:05.000"),

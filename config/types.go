@@ -85,10 +85,13 @@ type Server struct {
 }
 
 type Auth struct {
-	UsernameEnv     string        `yaml:"username_env"`
-	PasswordHashEnv string        `yaml:"password_hash_env"`
+	Issuer          string        `yaml:"issuer"`
+	ClientID        string        `yaml:"client_id"`
+	ClientSecretEnv string        `yaml:"client_secret_env"`
+	RedirectURL     string        `yaml:"redirect_url"`
+	RequiredGroup   string        `yaml:"required_group"`
 	SessionKeyEnv   string        `yaml:"session_key_env"`
-	SessionTTL      time.Duration `yaml:"session_ttl"` // optional; default 720h
+	SessionTTL      time.Duration `yaml:"session_ttl"`
 }
 
 type WhatsApp struct {

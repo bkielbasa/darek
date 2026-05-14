@@ -191,13 +191,9 @@ func runServe(ctx context.Context, cfgPath string) error {
 		}
 	}
 
-	authUsername, err := config.ResolveSecret("env:" + cfg.Auth.UsernameEnv)
+	clientSecret, err := config.ResolveSecret("env:" + cfg.Auth.ClientSecretEnv)
 	if err != nil {
-		return fmt.Errorf("auth username: %w (set Auth.UsernameEnv in config and the env var in secrets)", err)
-	}
-	authHash, err := config.ResolveSecret("env:" + cfg.Auth.PasswordHashEnv)
-	if err != nil {
-		return fmt.Errorf("auth password hash: %w (run `darek auth hash <password>` and set %s)", err, cfg.Auth.PasswordHashEnv)
+		return fmt.Errorf("auth client secret: %w (set %s)", err, cfg.Auth.ClientSecretEnv)
 	}
 	sessionKeyHex, err := config.ResolveSecret("env:" + cfg.Auth.SessionKeyEnv)
 	if err != nil {
@@ -207,12 +203,22 @@ func runServe(ctx context.Context, cfgPath string) error {
 	if err != nil {
 		return fmt.Errorf("auth session key: not valid hex: %w", err)
 	}
-	authCfg, err := serve.NewAuthConfig(authUsername, []byte(authHash), sessionKey, cfg.Auth.SessionTTL)
+	authCfg, err := serve.NewAuthConfig(sessionKey, cfg.Auth.SessionTTL)
 	if err != nil {
 		return err
 	}
+	oidcClient, err := serve.NewOIDC(ctx, serve.OIDCConfig{
+		Issuer:        cfg.Auth.Issuer,
+		ClientID:      cfg.Auth.ClientID,
+		ClientSecret:  clientSecret,
+		RedirectURL:   cfg.Auth.RedirectURL,
+		RequiredGroup: cfg.Auth.RequiredGroup,
+	})
+	if err != nil {
+		return fmt.Errorf("oidc init: %w", err)
+	}
 
-	srv, err := serve.New(store, sync, analyzer, authCfg, waManager, execStore, cfg.OTEL.JaegerUIURL)
+	srv, err := serve.New(store, sync, analyzer, authCfg, oidcClient, waManager, execStore, cfg.OTEL.JaegerUIURL)
 	if err != nil {
 		return err
 	}

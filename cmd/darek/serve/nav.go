@@ -1,5 +1,7 @@
 package serve
 
+import "context"
+
 // NavItem is one entry in the primary navigation. Enabled, if non-nil, gates
 // whether the item is shown — used to hide menu entries whose feature isn't
 // wired on this server.
@@ -29,6 +31,7 @@ type Page struct {
 	ActiveKey string
 	Nav       []NavItem
 	Footer    FooterInfo
+	Subject   string
 }
 
 // FooterInfo is the data the layout's footer renders. Populated by
@@ -59,11 +62,12 @@ func (s *Server) enabledNav() []NavItem {
 }
 
 // page assembles the chrome VM for a render. activeKey must match a NavItem.Key.
-func (s *Server) page(activeKey, title string) Page {
+func (s *Server) page(ctx context.Context, activeKey, title string) Page {
 	return Page{
 		Title:     title,
 		ActiveKey: activeKey,
 		Nav:       s.enabledNav(),
 		Footer:    s.footerInfo(),
+		Subject:   SubjectFromContext(ctx),
 	}
 }

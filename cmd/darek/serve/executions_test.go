@@ -17,10 +17,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Test bcrypt hash of "test-password" used purely to satisfy NewAuthConfig's
-// validation. None of the tests below exercise the auth path.
-const testBcryptHash = "$2a$10$0123456789012345678901uOoLwzVcuLrnMSCJjQspmIeqdMpwwCKy"
-
 func newTestServerWithExecutions(t *testing.T) (*Server, *db.Pool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -32,11 +28,11 @@ func newTestServerWithExecutions(t *testing.T) (*Server, *db.Pool) {
 	pool := db.Wrap(raw)
 	store := exechistory.NewStore(pool)
 
-	authCfg, err := NewAuthConfig("u", []byte(testBcryptHash), []byte("0123456789abcdef0123456789abcdef"), time.Hour)
+	authCfg, err := NewAuthConfig([]byte("0123456789abcdef0123456789abcdef"), time.Hour)
 	if err != nil {
 		t.Fatalf("auth: %v", err)
 	}
-	srv, err := New(nil, nil, nil, authCfg, nil, store, "")
+	srv, err := New(nil, nil, nil, authCfg, &OIDC{}, nil, store, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -109,11 +105,11 @@ VALUES ($1,$2,'0123456789abcdef','a','fetch',$3,$3,42,'ok','{}'::jsonb,'[]'::jso
 }
 
 func TestHandleExecutionsList_DisabledRendersFriendlyMessage(t *testing.T) {
-	authCfg, err := NewAuthConfig("u", []byte(testBcryptHash), []byte("0123456789abcdef0123456789abcdef"), time.Hour)
+	authCfg, err := NewAuthConfig([]byte("0123456789abcdef0123456789abcdef"), time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(nil, nil, nil, authCfg, nil, nil, "")
+	srv, err := New(nil, nil, nil, authCfg, &OIDC{}, nil, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
