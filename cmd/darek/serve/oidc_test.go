@@ -259,6 +259,15 @@ func TestHandleCallback_Happy(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	require.Equal(t, "/all", w.Header().Get("Location"))
 	require.Equal(t, "bartek", subject)
+	clearedCookies := map[string]int{}
+	for _, c := range w.Result().Cookies() {
+		if c.Name == oidcStateCookie || c.Name == oidcNonceCookie || c.Name == oidcPKCECookie {
+			clearedCookies[c.Name] = c.MaxAge
+		}
+	}
+	require.Equal(t, -1, clearedCookies[oidcStateCookie], "state cookie should be cleared")
+	require.Equal(t, -1, clearedCookies[oidcNonceCookie], "nonce cookie should be cleared")
+	require.Equal(t, -1, clearedCookies[oidcPKCECookie], "pkce cookie should be cleared")
 }
 
 func TestHandleCallback_GroupMissing(t *testing.T) {
