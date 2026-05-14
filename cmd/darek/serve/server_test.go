@@ -22,7 +22,7 @@ func dummyAuth(t *testing.T) serve.AuthConfig {
 }
 
 func TestServer_Healthz(t *testing.T) {
-	s, err := serve.New(nil, nil, nil, dummyAuth(t), nil, nil, nil, "")
+	s, err := serve.New(nil, nil, nil, dummyAuth(t), &serve.OIDC{}, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -38,7 +38,7 @@ func TestServer_Healthz(t *testing.T) {
 }
 
 func TestServer_StaticCSS(t *testing.T) {
-	s, err := serve.New(nil, nil, nil, dummyAuth(t), nil, nil, nil, "")
+	s, err := serve.New(nil, nil, nil, dummyAuth(t), &serve.OIDC{}, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}

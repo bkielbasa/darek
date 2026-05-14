@@ -58,6 +58,9 @@ type Server struct {
 // New constructs a Server. If sync is nil, the /sync route returns 501.
 // If analyzer is nil, /links/{id}/analyze returns 501 and the UI hides the button.
 func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, oidc *OIDC, wa WhatsAppManager, exec *exechistory.Store, jaegerURL string) (*Server, error) {
+	if oidc == nil {
+		return nil, fmt.Errorf("serve.New: oidc client is required")
+	}
 	b, err := parseTemplateBundle()
 	if err != nil {
 		return nil, err
