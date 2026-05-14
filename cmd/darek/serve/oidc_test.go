@@ -341,3 +341,56 @@ func TestHandleCallback_ProviderError(t *testing.T) {
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	require.Contains(t, w.Header().Get("Location"), "/login?error=forbidden")
 }
+
+func TestHandleCallback_ExpiredToken(t *testing.T) {
+	h := newCallbackHarness(t)
+	q := url.Values{"code": {"abc"}, "state": {h.state}}
+	w, _ := h.callback(t, q, idTokenClaims{
+		Iss:    h.fa.issuer,
+		Sub:    "u-1",
+		Aud:    "darek",
+		Exp:    time.Now().Add(-time.Second).Unix(),
+		Iat:    time.Now().Add(-time.Hour).Unix(),
+		Nonce:  h.nonce,
+		Groups: []string{"darek-users"},
+	})
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandleCallback_WrongSigningKey(t *testing.T) {
+	h := newCallbackHarness(t)
+	q := url.Values{"code": {"abc"}, "state": {h.state}}
+
+	otherKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	original := h.fa.key
+	h.fa.key = otherKey
+	t.Cleanup(func() { h.fa.key = original })
+
+	w, _ := h.callback(t, q, idTokenClaims{
+		Iss:    h.fa.issuer,
+		Sub:    "u-1",
+		Aud:    "darek",
+		Exp:    time.Now().Add(time.Hour).Unix(),
+		Iat:    time.Now().Unix(),
+		Nonce:  h.nonce,
+		Groups: []string{"darek-users"},
+	})
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestHandleCallback_GroupsClaimAbsent(t *testing.T) {
+	h := newCallbackHarness(t)
+	q := url.Values{"code": {"abc"}, "state": {h.state}}
+	w, subject := h.callback(t, q, idTokenClaims{
+		Iss:   h.fa.issuer,
+		Sub:   "u-1",
+		Aud:   "darek",
+		Exp:   time.Now().Add(time.Hour).Unix(),
+		Iat:   time.Now().Unix(),
+		Nonce: h.nonce,
+	})
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.Contains(t, w.Header().Get("Location"), "/login?error=forbidden")
+	require.Empty(t, subject)
+}
