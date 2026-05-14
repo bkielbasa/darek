@@ -12,19 +12,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/crypto/bcrypt"
 )
 
 const sessionCookieName = "darek_session"
 
-// AuthConfig is the subset of auth state needed by sign/verify and the
-// middleware. Built from cfg.Auth + resolved env values in runServe.
 type AuthConfig struct {
-	Username     string
-	PasswordHash []byte // bcrypt hash bytes
-	SessionKey   []byte // HMAC key, ≥32 bytes
-	SessionTTL   time.Duration
+	SessionKey []byte
+	SessionTTL time.Duration
 }
 
 // signSession encodes "<user>|<unix-expiry>|<hex-HMAC>" as base64-url.
@@ -37,8 +31,6 @@ func (a AuthConfig) signSession(user string, exp time.Time) string {
 }
 
 // verifyCookie returns the username from a valid token, or ("", false).
-// "Valid" means: parses, HMAC matches with SessionKey, not expired, and the
-// username matches a.Username (so rotating Username invalidates old cookies).
 func (a AuthConfig) verifyCookie(token string) (string, bool) {
 	if token == "" {
 		return "", false
@@ -67,14 +59,6 @@ func (a AuthConfig) verifyCookie(token string) (string, bool) {
 	return user, true
 }
 
-// routesAuth registers /login (GET, POST) and /logout (POST) on s.mux.
-// Called from Server.routes (Task 5).
-func (s *Server) routesAuth() {
-	s.mux.HandleFunc("GET /login", s.handleLoginGet)
-	s.mux.HandleFunc("POST /login", s.handleLoginPost)
-	s.mux.HandleFunc("POST /logout", s.handleLogout)
-}
-
 // requireAuth wraps next; bypasses isPublicPath, otherwise redirects to /login
 // when no valid cookie is present. On success, refreshes the cookie's expiry
 // (rolling session).
@@ -98,7 +82,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 }
 
 func isPublicPath(p string) bool {
-	return p == "/healthz" || p == "/login" || p == "/logout" ||
+	return p == "/healthz" || p == "/login" || p == "/logout" || p == "/auth/callback" ||
 		strings.HasPrefix(p, "/static/")
 }
 
@@ -137,74 +121,12 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-type loginPageData struct {
-	Error bool
-	Next  string
-}
-
-func (s *Server) handleLoginGet(w http.ResponseWriter, r *http.Request) {
-	data := loginPageData{
-		Error: r.URL.Query().Get("error") == "invalid",
-		Next:  sanitizeNext(r.URL.Query().Get("next")),
-	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := s.loginTmpl.ExecuteTemplate(w, "login.html", data); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "bad form", http.StatusBadRequest)
-		return
-	}
-	user := r.FormValue("username")
-	pw := r.FormValue("password")
-	next := sanitizeNext(r.URL.Query().Get("next"))
-
-	userOK := subtleEqual(user, s.auth.Username)
-	pwOK := bcrypt.CompareHashAndPassword(s.auth.PasswordHash, []byte(pw)) == nil
-
-	if !userOK || !pwOK {
-		http.Redirect(w, r,
-			"/login?error=invalid&next="+url.QueryEscape(next),
-			http.StatusSeeOther)
-		return
-	}
-	s.setSessionCookie(w, s.auth.Username)
-	http.Redirect(w, r, next, http.StatusSeeOther)
-}
-
-func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
-	s.clearSessionCookie(w)
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
-}
-
-// subtleEqual is a constant-time string comparison wrapper.
-func subtleEqual(a, b string) bool {
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
-}
-
-// NewAuthConfig builds an AuthConfig from resolved values. Used by runServe.
-// Returns an error if any required value is missing or the session key is too
-// short.
-func NewAuthConfig(username string, passwordHash, sessionKey []byte, ttl time.Duration) (AuthConfig, error) {
-	if username == "" {
-		return AuthConfig{}, fmt.Errorf("auth: username required")
-	}
-	if len(passwordHash) == 0 {
-		return AuthConfig{}, fmt.Errorf("auth: password hash required")
-	}
+func NewAuthConfig(sessionKey []byte, ttl time.Duration) (AuthConfig, error) {
 	if len(sessionKey) < 32 {
 		return AuthConfig{}, fmt.Errorf("auth: session key must be at least 32 bytes (got %d)", len(sessionKey))
 	}
 	if ttl <= 0 {
 		ttl = 720 * time.Hour
 	}
-	return AuthConfig{
-		Username:     username,
-		PasswordHash: passwordHash,
-		SessionKey:   sessionKey,
-		SessionTTL:   ttl,
-	}, nil
+	return AuthConfig{SessionKey: sessionKey, SessionTTL: ttl}, nil
 }

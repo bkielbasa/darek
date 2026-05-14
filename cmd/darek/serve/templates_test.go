@@ -75,8 +75,8 @@ func TestParseTemplateBundle(t *testing.T) {
 }
 
 func TestIndexRendersWithChrome(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
-	s, err := New(nil, nil, nil, a, nil, nil, "")
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -107,8 +107,8 @@ func TestIndexRendersWithChrome(t *testing.T) {
 }
 
 func TestExecutionsListRendersWithChrome(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
-	s, err := New(nil, nil, nil, a, nil, nil, "")
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -134,8 +134,8 @@ func TestExecutionsListRendersWithChrome(t *testing.T) {
 }
 
 func TestExecutionDetailRendersWithChrome(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
-	s, err := New(nil, nil, nil, a, nil, nil, "")
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
+	s, err := New(nil, nil, nil, a, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -161,9 +161,9 @@ func TestExecutionDetailRendersWithChrome(t *testing.T) {
 }
 
 func TestWhatsAppRendersWithChrome(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
 	// Pass a non-nil WhatsAppManager so the whatsapp nav item is enabled.
-	s, err := New(nil, nil, nil, a, fakeWhatsAppManager{}, nil, "")
+	s, err := New(nil, nil, nil, a, nil, fakeWhatsAppManager{}, nil, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -200,9 +200,9 @@ func (fakeWhatsAppManager) SetIngestEnabled(context.Context, string, bool) error
 func (fakeWhatsAppManager) Unpair(context.Context) error { return nil }
 
 func TestNavItemsAreRoutable(t *testing.T) {
-	a, _ := NewAuthConfig("test", []byte("ph"), make([]byte, 32), 0)
+	a, _ := NewAuthConfig(make([]byte, 32), 0)
 	// Server with every feature wired so all nav items are enabled.
-	s, err := New(nil, nil, nil, a, fakeWhatsAppManager{}, &exechistory.Store{}, "")
+	s, err := New(nil, nil, nil, a, nil, fakeWhatsAppManager{}, &exechistory.Store{}, "")
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}

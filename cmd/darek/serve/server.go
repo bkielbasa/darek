@@ -41,6 +41,7 @@ type Server struct {
 	sync       SyncFn
 	analyze    Analyzer
 	auth       AuthConfig
+	oidc       *OIDC
 	whatsApp   WhatsAppManager // nil-safe; routes only register when non-nil
 	executions *exechistory.Store
 	jaegerURL  string
@@ -56,7 +57,7 @@ type Server struct {
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
 // If analyzer is nil, /links/{id}/analyze returns 501 and the UI hides the button.
-func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, wa WhatsAppManager, exec *exechistory.Store, jaegerURL string) (*Server, error) {
+func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, oidc *OIDC, wa WhatsAppManager, exec *exechistory.Store, jaegerURL string) (*Server, error) {
 	b, err := parseTemplateBundle()
 	if err != nil {
 		return nil, err
@@ -67,6 +68,7 @@ func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, wa
 		sync:       sync,
 		analyze:    analyzer,
 		auth:       auth,
+		oidc:       oidc,
 		whatsApp:   wa,
 		executions: exec,
 		jaegerURL:  jaegerURL,
@@ -95,7 +97,7 @@ func (s *Server) routes() {
 	staticFS, _ := fs.Sub(StaticFS, "static")
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
 
-	s.routesAuth()
+	s.routesOIDC()
 
 	s.mux.Handle("GET /{$}", s.handleList(true))  // queue
 	s.mux.Handle("GET /all", s.handleList(false)) // archive

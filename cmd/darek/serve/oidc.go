@@ -248,3 +248,38 @@ func (o *OIDC) handleCallback(w http.ResponseWriter, r *http.Request, onSuccess 
 
 	onSuccess(subject, next)
 }
+
+func (s *Server) routesOIDC() {
+	s.mux.HandleFunc("GET /login", s.handleOIDCLogin)
+	s.mux.HandleFunc("GET /auth/callback", s.handleOIDCCallback)
+	s.mux.HandleFunc("POST /logout", s.handleLogout)
+}
+
+type loginPageData struct {
+	Error bool
+	Next  string
+}
+
+func (s *Server) handleOIDCLogin(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("error") != "" {
+		data := loginPageData{Error: true, Next: sanitizeNext(r.URL.Query().Get("next"))}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := s.loginTmpl.ExecuteTemplate(w, "login.html", data); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+	s.oidc.handleLoginGet(w, r)
+}
+
+func (s *Server) handleOIDCCallback(w http.ResponseWriter, r *http.Request) {
+	s.oidc.handleCallback(w, r, func(subject, next string) {
+		s.setSessionCookie(w, subject)
+		http.Redirect(w, r, next, http.StatusSeeOther)
+	})
+}
+
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	s.clearSessionCookie(w)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
+}
