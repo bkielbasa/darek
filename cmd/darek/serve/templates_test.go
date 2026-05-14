@@ -82,7 +82,7 @@ func TestIndexRendersWithChrome(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	vm := indexVM{
-		Page:    s.page("queue", "darek — queue"),
+		Page:    s.page(context.Background(), "queue", "darek — queue"),
 		Path:    "/",
 		Kinds:   []string{"article"},
 		Ratings: []int{1, 2, 3, 4, 5},
@@ -113,7 +113,7 @@ func TestExecutionsListRendersWithChrome(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	vm := executionsListVM{
-		Page:     s.page("executions", "executions · darek"),
+		Page:     s.page(context.Background(), "executions", "executions · darek"),
 		Disabled: true,
 	}
 	rec := httptest.NewRecorder()
@@ -140,7 +140,7 @@ func TestExecutionDetailRendersWithChrome(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	vm := executionDetailVM{
-		Page:     s.page("executions", "execution · darek"),
+		Page:     s.page(context.Background(), "executions", "execution · darek"),
 		Disabled: true,
 	}
 	rec := httptest.NewRecorder()
@@ -168,7 +168,7 @@ func TestWhatsAppRendersWithChrome(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	vm := whatsAppPageVM{
-		Page: s.page("whatsapp", "darek — whatsapp"),
+		Page: s.page(context.Background(), "whatsapp", "darek — whatsapp"),
 	}
 	rec := httptest.NewRecorder()
 	if err := s.render(rec, "whatsapp.html", vm); err != nil {

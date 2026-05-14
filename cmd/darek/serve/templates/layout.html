@@ -27,6 +27,8 @@
   <span class="brand">{{.Page.Footer.Brand}}</span>
   <span class="muted">v{{.Page.Footer.Version}}</span>
   <span class="muted">last sync: {{.Page.Footer.LastSync}}</span>
+  {{ if .Page.Subject }}<span class="muted">signed in as {{.Page.Subject}}</span>
+  <form method="POST" action="/logout" style="display:inline"><button type="submit" class="linklike">logout</button></form>{{ end }}
 </footer>
 </body>
 </html>

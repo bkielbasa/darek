@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -13,6 +14,17 @@ import (
 	"strings"
 	"time"
 )
+
+type ctxKey int
+
+const subjectCtxKey ctxKey = 1
+
+func SubjectFromContext(ctx context.Context) string {
+	if v, ok := ctx.Value(subjectCtxKey).(string); ok {
+		return v
+	}
+	return ""
+}
 
 const sessionCookieName = "darek_session"
 
@@ -72,6 +84,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		if err == nil {
 			if sub, ok := s.auth.verifyCookie(c.Value); ok {
 				s.setSessionCookie(w, sub) // rolling — re-signs with the same subject
+				r = r.WithContext(context.WithValue(r.Context(), subjectCtxKey, sub))
 				next.ServeHTTP(w, r)
 				return
 			}

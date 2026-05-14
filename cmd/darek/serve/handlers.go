@@ -203,7 +203,7 @@ func (s *Server) handleList(queueOnly bool) http.HandlerFunc {
 			activeKey = "archive"
 		}
 		vm := indexVM{
-			Page: s.page(activeKey, "darek — "+title),
+			Page: s.page(r.Context(), activeKey, "darek — "+title),
 			Path: path,
 			Query:     q,
 			Kinds:     []string{"article", "video", "tweet", "podcast", "other"},
