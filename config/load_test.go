@@ -43,10 +43,6 @@ openai:
 otel:
   service_name: t
   exporter_endpoint: localhost:4317
-auth:
-  username_env: U
-  password_hash_env: H
-  session_key_env: S
 blog_marketing:
   feed_url: https://blog.example.com/feed.xml
   project_name: Marketing
@@ -69,7 +65,6 @@ func TestLoad_BlogMarketing_BadTime(t *testing.T) {
 postgres: {url_env: X}
 openai: {api_key_env: K, model: gpt-4.1}
 otel: {service_name: t, exporter_endpoint: localhost:4317}
-auth: {username_env: U, password_hash_env: H, session_key_env: S}
 blog_marketing:
   feed_url: https://blog.example.com/feed.xml
   project_name: Marketing
@@ -89,7 +84,6 @@ func TestLoad_BlogMarketing_BadTimezone(t *testing.T) {
 postgres: {url_env: X}
 openai: {api_key_env: K, model: gpt-4.1}
 otel: {service_name: t, exporter_endpoint: localhost:4317}
-auth: {username_env: U, password_hash_env: H, session_key_env: S}
 blog_marketing:
   feed_url: https://blog.example.com/feed.xml
   project_name: Marketing
@@ -149,4 +143,40 @@ execution_history:
 `)
 	_, err := Load(path)
 	require.Error(t, err)
+}
+
+func TestLoad_Auth_RequiresFieldsWhenIssuerSet(t *testing.T) {
+	t.Setenv("OAI", "x")
+	t.Setenv("PG", "postgres://x")
+	path := writeTempConfig(t, `
+openai: {model: m, api_key_env: OAI}
+postgres: {url_env: PG}
+auth:
+  issuer: https://authentik.example/application/o/darek/
+`)
+	_, err := Load(path)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "client_id")
+}
+
+func TestLoad_Auth_OK(t *testing.T) {
+	t.Setenv("OAI", "x")
+	t.Setenv("PG", "postgres://x")
+	t.Setenv("CS", "fake-client-secret")
+	t.Setenv("SK", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	path := writeTempConfig(t, `
+openai: {model: m, api_key_env: OAI}
+postgres: {url_env: PG}
+auth:
+  issuer: https://authentik.example/application/o/darek/
+  client_id: darek
+  client_secret_env: CS
+  redirect_url: https://darek.example/auth/callback
+  required_group: darek-users
+  session_key_env: SK
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	require.Equal(t, "darek", cfg.Auth.ClientID)
+	require.Equal(t, "darek-users", cfg.Auth.RequiredGroup)
 }

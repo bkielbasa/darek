@@ -63,3 +63,12 @@ blog_marketing:
   sync_interval: 15m       # 0 disables the in-server loop
   post_time: "09:00"
   timezone: Europe/Warsaw  # optional; default = system local
+
+auth:
+  issuer: https://authentik.example.com/application/o/darek/
+  client_id: darek
+  client_secret_env: DAREK_OIDC_CLIENT_SECRET
+  redirect_url: https://darek.example.com/auth/callback
+  required_group: darek-users
+  session_key_env: DAREK_SESSION_KEY
+  session_ttl: 720h

@@ -98,5 +98,29 @@ func validate(c *Config) error {
 		}
 	}
 
+	if c.Auth.Issuer != "" {
+		if c.Auth.ClientID == "" {
+			return fmt.Errorf("auth.client_id is required when auth.issuer is set")
+		}
+		if c.Auth.ClientSecretEnv == "" {
+			return fmt.Errorf("auth.client_secret_env is required when auth.issuer is set")
+		}
+		if os.Getenv(c.Auth.ClientSecretEnv) == "" {
+			return fmt.Errorf("env var %s (auth.client_secret_env) is empty", c.Auth.ClientSecretEnv)
+		}
+		if c.Auth.RedirectURL == "" {
+			return fmt.Errorf("auth.redirect_url is required when auth.issuer is set")
+		}
+		if c.Auth.RequiredGroup == "" {
+			return fmt.Errorf("auth.required_group is required when auth.issuer is set")
+		}
+		if c.Auth.SessionKeyEnv == "" {
+			return fmt.Errorf("auth.session_key_env is required when auth.issuer is set")
+		}
+		if os.Getenv(c.Auth.SessionKeyEnv) == "" {
+			return fmt.Errorf("env var %s (auth.session_key_env) is empty", c.Auth.SessionKeyEnv)
+		}
+	}
+
 	return nil
 }
