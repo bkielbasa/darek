@@ -64,9 +64,6 @@ func (a AuthConfig) verifyCookie(token string) (string, bool) {
 	if err != nil || time.Now().Unix() > exp {
 		return "", false
 	}
-	if subtle.ConstantTimeCompare([]byte(user), []byte(a.Username)) != 1 {
-		return "", false
-	}
 	return user, true
 }
 
@@ -89,8 +86,8 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 		}
 		c, err := r.Cookie(sessionCookieName)
 		if err == nil {
-			if _, ok := s.auth.verifyCookie(c.Value); ok {
-				s.setSessionCookie(w) // rolling
+			if sub, ok := s.auth.verifyCookie(c.Value); ok {
+				s.setSessionCookie(w, sub) // rolling — re-signs with the same subject
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -115,11 +112,11 @@ func sanitizeNext(s string) string {
 	return s
 }
 
-func (s *Server) setSessionCookie(w http.ResponseWriter) {
+func (s *Server) setSessionCookie(w http.ResponseWriter, subject string) {
 	exp := time.Now().Add(s.auth.SessionTTL)
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
-		Value:    s.auth.signSession(s.auth.Username, exp),
+		Value:    s.auth.signSession(subject, exp),
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
@@ -174,7 +171,7 @@ func (s *Server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 			http.StatusSeeOther)
 		return
 	}
-	s.setSessionCookie(w)
+	s.setSessionCookie(w, s.auth.Username)
 	http.Redirect(w, r, next, http.StatusSeeOther)
 }
 

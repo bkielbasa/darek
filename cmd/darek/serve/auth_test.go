@@ -32,10 +32,15 @@ func newTestAuth(ttl time.Duration) AuthConfig {
 
 func TestSignVerify_Roundtrip(t *testing.T) {
 	a := newTestAuth(time.Hour)
-	tok := a.signSession(testUser, time.Now().Add(time.Hour))
-	user, ok := a.verifyCookie(tok)
+	tok := a.signSession("alice", time.Now().Add(time.Hour))
+	got, ok := a.verifyCookie(tok)
 	require.True(t, ok)
-	require.Equal(t, testUser, user)
+	require.Equal(t, "alice", got)
+
+	tokB := a.signSession("bob", time.Now().Add(time.Hour))
+	got, ok = a.verifyCookie(tokB)
+	require.True(t, ok)
+	require.Equal(t, "bob", got)
 }
 
 func TestVerify_TamperedSig(t *testing.T) {
@@ -46,19 +51,6 @@ func TestVerify_TamperedSig(t *testing.T) {
 	mid := len(tok) / 2
 	bad := tok[:mid] + flipChar(tok[mid]) + tok[mid+1:]
 	_, ok := a.verifyCookie(bad)
-	require.False(t, ok)
-}
-
-func TestVerify_TamperedPayloadUsername(t *testing.T) {
-	a := newTestAuth(time.Hour)
-	tok := a.signSession(testUser, time.Now().Add(time.Hour))
-	// inject a different username by re-signing with a different key:
-	// produce a token that LOOKS valid for "alice" but with the real key's sig
-	// for "bartek". Easiest: just verify that a token signed for a different
-	// user via the correct key still gets rejected when AuthConfig expects bartek.
-	tokForAlice := a.signSession("alice", time.Now().Add(time.Hour))
-	_ = tok
-	_, ok := a.verifyCookie(tokForAlice)
 	require.False(t, ok)
 }
 

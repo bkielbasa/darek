@@ -68,7 +68,7 @@ func authedRequest(t *testing.T, s *Server, method, target, body string) *http.R
 
 	// Mint a session cookie via the server itself.
 	sessRec := httptest.NewRecorder()
-	s.setSessionCookie(sessRec)
+	s.setSessionCookie(sessRec, s.auth.Username)
 
 	req := httptest.NewRequest(method, target, strings.NewReader(body))
 	if body != "" {
