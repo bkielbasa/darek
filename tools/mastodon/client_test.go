@@ -61,6 +61,29 @@ func TestToot_ErrorPropagatesStatusAndBody(t *testing.T) {
 	require.Contains(t, err.Error(), "too long")
 }
 
+func TestVerifyCredentials_OK(t *testing.T) {
+	c := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/v1/accounts/verify_credentials", r.URL.Path)
+		require.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"1","username":"bk","acct":"bk","display_name":"BK"}`))
+	})
+	got, err := c.VerifyCredentials(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, "bk", got.Username)
+	require.Equal(t, "BK", got.DisplayName)
+}
+
+func TestVerifyCredentials_Unauthorized(t *testing.T) {
+	c := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":"token revoked"}`))
+	})
+	_, err := c.VerifyCredentials(context.Background())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "401")
+}
+
 func TestNew_RequiresInstanceAndToken(t *testing.T) {
 	_, err := New(Options{Token: "t"})
 	require.Error(t, err)

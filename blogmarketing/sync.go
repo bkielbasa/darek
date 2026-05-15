@@ -282,10 +282,47 @@ func SyncAll(ctx context.Context, store *Store, drafter Drafter, td TodoistAPI, 
 }
 
 func recordDuration(ctx context.Context, start time.Time, outcome string) {
+	recordHist(ctx, start, outcome, func(m *obs.Metrics) metric.Float64Histogram {
+		return m.BlogMarketingSyncDuration
+	})
+}
+
+// recordHist is the shared "record one duration on one histogram with outcome
+// attribute" helper, used by Sync / Publish / Regenerate. Picks the histogram
+// via the accessor so the caller can target the right metric without
+// duplicating the obs.MetricsInstance plumbing.
+func recordHist(ctx context.Context, start time.Time, outcome string, pick func(*obs.Metrics) metric.Float64Histogram) {
 	m, err := obs.MetricsInstance()
 	if err != nil || m == nil {
 		return
 	}
-	m.BlogMarketingSyncDuration.Record(ctx, time.Since(start).Seconds(),
+	h := pick(m)
+	if h == nil {
+		return
+	}
+	h.Record(ctx, time.Since(start).Seconds(),
 		metric.WithAttributes(attribute.String("outcome", outcome)))
+}
+
+// publishOutcome / regenerateOutcome mirror the sync-side outcome helper. The
+// existing outcome() takes a *Result; these accept the per-orchestrator
+// result types, returning "ok" / "partial" / "error" by the same rules.
+func publishOutcome(r *PublishResult) string {
+	if r == nil {
+		return "error"
+	}
+	if len(r.Errors) > 0 {
+		return "partial"
+	}
+	return "ok"
+}
+
+func regenerateOutcome(r *RegenerateResult) string {
+	if r == nil {
+		return "error"
+	}
+	if len(r.Errors) > 0 {
+		return "partial"
+	}
+	return "ok"
 }

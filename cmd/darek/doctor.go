@@ -12,6 +12,7 @@ import (
 	"darek/db"
 	"darek/llm"
 	"darek/tools/blogfeed"
+	"darek/tools/mastodon"
 	"darek/tools/todoist"
 )
 
@@ -119,6 +120,30 @@ func runDoctor(ctx context.Context, cfgPath string) error {
 					}
 					_, rerr := td.ResolveProjectID(ctx, project)
 					add(fmt.Sprintf("blog %s project resolvable", f.ID), rerr, fmt.Sprintf("project=%s", project))
+				}
+				// Mastodon auto-poster credential probe (only when configured).
+				if mc, ok := f.Accounts["mastodon"]; ok && mc.TokenEnv != "" {
+					tok, terr := config.ResolveSecret("env:" + mc.TokenEnv)
+					if terr != nil || tok == "" {
+						add(fmt.Sprintf("blog %s mastodon token", f.ID),
+							fmt.Errorf("env %s unset or empty", mc.TokenEnv), "")
+					} else if mc.Instance == "" {
+						add(fmt.Sprintf("blog %s mastodon instance", f.ID),
+							fmt.Errorf("instance missing while token_env is set"), "")
+					} else {
+						mast, merr := mastodon.New(mastodon.Options{Instance: mc.Instance, Token: tok, Timeout: 5 * time.Second})
+						if merr != nil {
+							add(fmt.Sprintf("blog %s mastodon client", f.ID), merr, "")
+						} else {
+							acct, vErr := mast.VerifyCredentials(ctx)
+							if vErr != nil {
+								add(fmt.Sprintf("blog %s mastodon credentials", f.ID), vErr, "")
+							} else {
+								add(fmt.Sprintf("blog %s mastodon credentials", f.ID), nil,
+									fmt.Sprintf("authenticated as @%s on %s", acct.Username, mc.Instance))
+							}
+						}
+					}
 				}
 			}
 		}

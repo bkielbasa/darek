@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"darek/exechistory"
+	"darek/obs"
 	"darek/tools/mastodon"
 	"darek/tools/todoist"
 
 	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -128,7 +130,14 @@ func Publish(ctx context.Context, store PublishStore, td PublishTodoistAPI, pc *
 	exechistory.MarkExecution(span, "blog-marketing-publish")
 	defer span.End()
 
+	start := time.Now()
 	res := &PublishResult{}
+	outcomeStr := "error"
+	defer func() {
+		recordHist(ctx, start, outcomeStr, func(m *obs.Metrics) metric.Float64Histogram {
+			return m.BlogMarketingPublishDuration
+		})
+	}()
 	now := time.Now()
 
 	for _, pid := range projectIDs {
@@ -218,6 +227,7 @@ func Publish(ctx context.Context, store PublishStore, td PublishTodoistAPI, pc *
 		attribute.Int("skipped", res.Skipped),
 		attribute.Int("errors", len(res.Errors)),
 	)
+	outcomeStr = publishOutcome(res)
 	return res, nil
 }
 

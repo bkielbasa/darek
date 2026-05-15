@@ -49,8 +49,10 @@ type Metrics struct {
 	// Todoist source
 	TodoistSyncDuration metric.Float64Histogram
 
-	// Blog-marketing scheduler
-	BlogMarketingSyncDuration metric.Float64Histogram
+	// Blog-marketing scheduler / auto-poster / regenerate
+	BlogMarketingSyncDuration       metric.Float64Histogram
+	BlogMarketingPublishDuration    metric.Float64Histogram
+	BlogMarketingRegenerateDuration metric.Float64Histogram
 
 	// WhatsApp ingest
 	WhatsAppMessages metric.Int64Counter
@@ -114,7 +116,9 @@ func MetricsInstance() (*Metrics, error) {
 			FreshRSSSyncDuration:      f64hist(m.Float64Histogram("darek.freshrss.sync_duration", metric.WithUnit("s"))),
 			LinksAnalyze:              i64(m.Int64Counter("darek.links.analyze")),
 			TodoistSyncDuration:       f64hist(m.Float64Histogram("darek.todoist.sync_duration", metric.WithUnit("s"))),
-			BlogMarketingSyncDuration: f64hist(m.Float64Histogram("darek.blog_marketing.sync_duration", metric.WithUnit("s"))),
+			BlogMarketingSyncDuration:       f64hist(m.Float64Histogram("darek.blog_marketing.sync_duration", metric.WithUnit("s"))),
+			BlogMarketingPublishDuration:    f64hist(m.Float64Histogram("darek.blog_marketing.publish_duration", metric.WithUnit("s"))),
+			BlogMarketingRegenerateDuration: f64hist(m.Float64Histogram("darek.blog_marketing.regenerate_duration", metric.WithUnit("s"))),
 			WhatsAppMessages:          i64(m.Int64Counter("darek.whatsapp.messages_ingested")),
 		}
 		metricsErr = err

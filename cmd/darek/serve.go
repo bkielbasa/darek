@@ -248,13 +248,11 @@ func runServe(ctx context.Context, cfgPath string) error {
 	if blogSync != nil && cfg.BlogMarketing.SyncInterval > 0 {
 		go runSyncLoop(ctx, blogSync, cfg.BlogMarketing.SyncInterval, "blog")
 	}
-	// Auto-poster runs on a fixed 1h interval. The user agreed to a hardcoded
-	// cadence in the spec; if that proves wrong, add a knob then.
-	if blogPublish != nil {
-		go runSyncLoop(ctx, blogPublish, time.Hour, "blog-publish")
+	if blogPublish != nil && cfg.BlogMarketing.PublishInterval > 0 {
+		go runSyncLoop(ctx, blogPublish, cfg.BlogMarketing.PublishInterval, "blog-publish")
 	}
-	if blogRegenerate != nil {
-		go runSyncLoop(ctx, blogRegenerate, 5*time.Minute, "blog-regenerate")
+	if blogRegenerate != nil && cfg.BlogMarketing.RegenerateInterval > 0 {
+		go runSyncLoop(ctx, blogRegenerate, cfg.BlogMarketing.RegenerateInterval, "blog-regenerate")
 	}
 
 	if cfg.ExecutionHistory.Enabled {

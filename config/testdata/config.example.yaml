@@ -58,10 +58,12 @@ mail:
       sync_folders: [INBOX]
 
 blog_marketing:
-  sync_interval: 15m         # 0 disables the in-server loop
-  project_name: Marketing    # default for every feed; can be overridden per feed
-  post_time: "09:00"         # default; can be overridden per feed
-  timezone: Europe/Warsaw    # default; can be overridden per feed
+  sync_interval: 15m            # 0 disables the RSS polling loop
+  publish_interval: 1h          # 0 disables the auto-poster loop
+  regenerate_interval: 5m       # 0 disables the regenerate-label scanner
+  project_name: Marketing       # default for every feed; can be overridden per feed
+  post_time: "09:00"            # default; can be overridden per feed
+  timezone: Europe/Warsaw       # default; can be overridden per feed
   feeds:
     - id: tech-blog
       feed_url: https://blog.example.com/feed.xml

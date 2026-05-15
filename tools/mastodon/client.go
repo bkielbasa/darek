@@ -61,6 +61,50 @@ type Status struct {
 	URL string `json:"url"`
 }
 
+// Account is the subset of Mastodon's CredentialAccount we surface — used by
+// VerifyCredentials so callers can confirm the token is valid AND that it
+// authenticates to the expected handle (catches accidentally crossed wires
+// where the token belongs to a different account than the configured handle).
+type Account struct {
+	ID         string `json:"id"`
+	Username   string `json:"username"`     // local handle without instance, e.g. "bk"
+	Acct       string `json:"acct"`         // local handle, often equal to username
+	DisplayName string `json:"display_name"`
+}
+
+// VerifyCredentials returns the authenticated account, confirming the token
+// is valid and identifying which Mastodon user it belongs to. Cheap; used by
+// darek doctor to surface bad/expired tokens before the auto-poster trips
+// on them at midnight.
+func (c *Client) VerifyCredentials(ctx context.Context) (*Account, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		c.instance+"/api/v1/accounts/verify_credentials", nil)
+	if err != nil {
+		return nil, fmt.Errorf("new request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.token)
+	var out Account
+	err = obs.Dep(ctx, "mastodon", "verify_credentials", func(ctx context.Context) error {
+		resp, err := c.http.Do(req.WithContext(ctx))
+		if err != nil {
+			return fmt.Errorf("http: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode/100 != 2 {
+			b, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("mastodon verify_credentials: status %d: %s", resp.StatusCode, string(b))
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return fmt.Errorf("decode: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Toot posts a status to the configured account. idempotencyKey, if non-empty,
 // is sent as the Idempotency-Key header — Mastodon servers use it to dedup
 // retries within their idempotency window (typically a few minutes), returning

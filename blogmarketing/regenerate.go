@@ -6,12 +6,15 @@ import (
 	"fmt"
 
 	"darek/exechistory"
+	"darek/obs"
 	"darek/tools/blogfeed"
 	"darek/tools/todoist"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // RegenerateLabel is the Todoist label users add to a single task when they
@@ -73,7 +76,14 @@ func Regenerate(ctx context.Context, store RegenerateStore, td RegenerateTodoist
 	exechistory.MarkExecution(span, "blog-marketing-regenerate")
 	defer span.End()
 
+	start := time.Now()
 	res := &RegenerateResult{}
+	outcomeStr := "error"
+	defer func() {
+		recordHist(ctx, start, outcomeStr, func(m *obs.Metrics) metric.Float64Histogram {
+			return m.BlogMarketingRegenerateDuration
+		})
+	}()
 
 	tasks, err := td.ListTasks(ctx, todoist.ListFilter{Label: RegenerateLabel})
 	if err != nil {
@@ -128,6 +138,7 @@ func Regenerate(ctx context.Context, store RegenerateStore, td RegenerateTodoist
 		attribute.Int("skipped", res.Skipped),
 		attribute.Int("errors", len(res.Errors)),
 	)
+	outcomeStr = regenerateOutcome(res)
 	return res, nil
 }
 

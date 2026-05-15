@@ -113,6 +113,12 @@ func Load(path string) (*Config, error) {
 }
 
 func applyDefaults(c *Config) {
+	if c.BlogMarketing.PublishInterval == 0 {
+		c.BlogMarketing.PublishInterval = time.Hour
+	}
+	if c.BlogMarketing.RegenerateInterval == 0 {
+		c.BlogMarketing.RegenerateInterval = 5 * time.Minute
+	}
 	if c.Agent.MaxIterations == 0 {
 		c.Agent.MaxIterations = 10
 	}

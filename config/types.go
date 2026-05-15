@@ -77,11 +77,13 @@ type FreshRSS struct {
 // triggers a per-blog backfill (no tasks for posts that pre-date the first
 // poll for that blog).
 type BlogMarketing struct {
-	SyncInterval time.Duration `yaml:"sync_interval"`
-	ProjectName  string        `yaml:"project_name"` // default for all feeds
-	PostTime     string        `yaml:"post_time"`    // default for all feeds, "HH:MM"
-	Timezone     string        `yaml:"timezone"`     // default for all feeds; optional
-	Feeds        []BlogFeed    `yaml:"feeds"`
+	SyncInterval       time.Duration `yaml:"sync_interval"`
+	PublishInterval    time.Duration `yaml:"publish_interval"`    // auto-poster cadence; 0 ⇒ default 1h
+	RegenerateInterval time.Duration `yaml:"regenerate_interval"` // re-roll scanner cadence; 0 ⇒ default 5m
+	ProjectName        string        `yaml:"project_name"`        // default for all feeds
+	PostTime           string        `yaml:"post_time"`           // default for all feeds, "HH:MM"
+	Timezone           string        `yaml:"timezone"`            // default for all feeds; optional
+	Feeds              []BlogFeed    `yaml:"feeds"`
 }
 
 // BlogFeed is one blog's worth of config. ID is the stable identifier persisted
