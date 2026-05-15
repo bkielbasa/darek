@@ -56,6 +56,8 @@ type fakeTodoist struct {
 	deleted     []string
 	failOnIndex int // -1 means never; 0-based index into create-call sequence
 	idCounter   int
+	// Map of id → task; if missing from the map, GetTask returns ErrNotFound.
+	tasksByID map[string]*todoist.Task
 }
 
 func (t *fakeTodoist) ResolveProjectID(ctx context.Context, name string) (string, error) {
@@ -82,6 +84,15 @@ func (t *fakeTodoist) DeleteTask(ctx context.Context, id string) error {
 	defer t.mu.Unlock()
 	t.deleted = append(t.deleted, id)
 	return nil
+}
+
+func (t *fakeTodoist) GetTask(ctx context.Context, id string) (*todoist.Task, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if got, ok := t.tasksByID[id]; ok {
+		return got, nil
+	}
+	return nil, todoist.ErrNotFound
 }
 
 func warsaw(t *testing.T) *time.Location {

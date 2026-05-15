@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,6 +17,11 @@ import (
 )
 
 const defaultBaseURL = "https://api.todoist.com/api/v1"
+
+// ErrNotFound is returned (wrapped) when a single-resource fetch like
+// GetTask sees a 404. Callers distinguish "deleted / never existed" from
+// transport/auth errors via errors.Is.
+var ErrNotFound = errors.New("todoist: not found")
 
 type Client struct {
 	base  string
@@ -133,6 +139,16 @@ func (c *Client) CompleteTask(ctx context.Context, id string) error {
 	return c.doJSON(ctx, "complete_task", http.MethodPost, "/tasks/"+id+"/close", nil, nil)
 }
 
+// GetTask fetches a single task. Returns an error wrapping ErrNotFound if the
+// task no longer exists in Todoist (deleted or unknown id).
+func (c *Client) GetTask(ctx context.Context, id string) (*Task, error) {
+	var out Task
+	if err := c.doJSON(ctx, "get_task", http.MethodGet, "/tasks/"+id, nil, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // DeleteTask removes a task. Used by blog-marketing rollback when 9-task
 // creation partially fails.
 func (c *Client) DeleteTask(ctx context.Context, id string) error {
@@ -214,6 +230,9 @@ func (c *Client) doJSON(ctx context.Context, op, method, path string, body, out 
 			return fmt.Errorf("http: %w", err)
 		}
 		defer resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("todoist %s %s: %w", method, path, ErrNotFound)
+		}
 		if resp.StatusCode/100 != 2 {
 			b, _ := io.ReadAll(resp.Body)
 			return fmt.Errorf("todoist %s %s: status %d: %s", method, path, resp.StatusCode, string(b))

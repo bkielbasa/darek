@@ -135,6 +135,29 @@ func TestDeleteTask(t *testing.T) {
 	require.NoError(t, c.DeleteTask(context.Background(), "abc"))
 }
 
+func TestGetTask_OK(t *testing.T) {
+	c, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		require.True(t, strings.HasSuffix(r.URL.Path, "/tasks/abc"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"abc","content":"Hi","is_completed":true,"labels":["x","launch"],"url":"https://todoist.com/showTask?id=abc"}`))
+	})
+	got, err := c.GetTask(context.Background(), "abc")
+	require.NoError(t, err)
+	require.Equal(t, "abc", got.ID)
+	require.True(t, got.IsCompleted)
+	require.Equal(t, []string{"x", "launch"}, got.Labels)
+}
+
+func TestGetTask_NotFound(t *testing.T) {
+	c, _ := newServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+	_, err := c.GetTask(context.Background(), "missing")
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrNotFound)
+}
+
 func TestCreateTask_DueDatetime(t *testing.T) {
 	c, _ := newServer(t, func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)

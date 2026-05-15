@@ -39,15 +39,38 @@ func TestStore_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, scheduled, "seen-only rows still count as scheduled for dedup")
 
-	// Full schedule path.
-	require.NoError(t, store.MarkScheduled(ctx, "https://blog.example.com/new",
+	// Full schedule path: build a 9-cell ref slice and persist.
+	refs := make([]blogmarketing.TaskRef, 0, 9)
+	for _, p := range blogmarketing.AllPlatforms {
+		for _, c := range blogmarketing.AllCadences {
+			refs = append(refs, blogmarketing.TaskRef{
+				Platform:  p,
+				Cadence:   c,
+				TodoistID: "id-" + string(p) + "-" + string(c),
+			})
+		}
+	}
+	require.NoError(t, store.SaveTasks(ctx,
+		"https://blog.example.com/new",
 		time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC),
-		[]string{"t1", "t2", "t3", "t4", "t5", "t6", "t7", "t8", "t9"},
+		refs,
 	))
 
 	scheduled, err = store.IsScheduled(ctx, "https://blog.example.com/new")
 	require.NoError(t, err)
 	require.True(t, scheduled)
+
+	// Round-trip: GetTasks returns the same set.
+	got, err := store.GetTasks(ctx, "https://blog.example.com/new")
+	require.NoError(t, err)
+	require.Len(t, got, 9)
+
+	// Reverse-lookup: LookupTask resolves any one of the ids back to its cell.
+	url, plat, cad, err := store.LookupTask(ctx, "id-x-launch")
+	require.NoError(t, err)
+	require.Equal(t, "https://blog.example.com/new", url)
+	require.Equal(t, blogmarketing.PlatformX, plat)
+	require.Equal(t, blogmarketing.CadenceLaunch, cad)
 
 	// Idempotency: re-marking is fine (PRIMARY KEY conflict swallowed via ON CONFLICT DO NOTHING).
 	require.NoError(t, store.MarkSeenOnly(ctx, "https://blog.example.com/old", time.Now()))

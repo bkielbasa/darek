@@ -24,12 +24,13 @@ type FeedLister interface {
 	List(ctx context.Context) ([]blogfeed.Entry, error)
 }
 
-// TodoistAPI is the subset of *todoist.Client used by Sync. Defined here so
-// tests can supply a fake.
+// TodoistAPI is the subset of *todoist.Client used by Sync and the reverse-
+// sync helpers in this package. Defined here so tests can supply a fake.
 type TodoistAPI interface {
 	ResolveProjectID(ctx context.Context, name string) (string, error)
 	CreateTask(ctx context.Context, req todoist.CreateRequest) (*todoist.Task, error)
 	DeleteTask(ctx context.Context, id string) error
+	GetTask(ctx context.Context, id string) (*todoist.Task, error)
 }
 
 // Config is the per-run configuration. PostTime is "HH:MM"; Timezone is the
@@ -142,18 +143,18 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 			CadenceResurface3Mo: atTime(launchDate.AddDate(0, 0, 90), hh, mm, loc),
 		}
 
-		ids, err := createSeries(ctx, td, pid, e, drafts, dueByCadence)
+		refs, err := createSeries(ctx, td, pid, e, drafts, dueByCadence)
 		if err != nil {
-			rollback(ctx, td, ids)
+			rollback(ctx, td, refs)
 			res.Errors = append(res.Errors, fmt.Errorf("%s: create series: %w", e.CanonicalURL, err))
 			continue
 		}
-		if err := store.MarkScheduled(ctx, e.CanonicalURL, e.PublishedAt, ids); err != nil {
+		if err := store.SaveTasks(ctx, e.CanonicalURL, e.PublishedAt, refs); err != nil {
 			// State write failed AFTER all 9 tasks landed — log but DON'T roll back
 			// (would delete real Todoist tasks the user can see); next poll will
 			// re-detect via the feed but IsScheduled will return false, so it will
 			// re-create. Documented as a known edge in the spec's "open considerations".
-			res.Errors = append(res.Errors, fmt.Errorf("%s: mark_scheduled: %w", e.CanonicalURL, err))
+			res.Errors = append(res.Errors, fmt.Errorf("%s: save_tasks: %w", e.CanonicalURL, err))
 			continue
 		}
 		res.Scheduled++
@@ -169,10 +170,12 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 	return res, nil
 }
 
-// createSeries creates the 9 tasks sequentially. Returns the IDs created so
-// far and the first error encountered.
-func createSeries(ctx context.Context, td TodoistAPI, projectID string, e blogfeed.Entry, drafts Drafts, due map[Cadence]time.Time) ([]string, error) {
-	ids := make([]string, 0, 9)
+// createSeries creates the 9 tasks sequentially. Returns the refs created so
+// far and the first error encountered. Each ref carries its (platform, cadence)
+// tag so the caller can persist a normalised mapping without re-deriving by
+// list position.
+func createSeries(ctx context.Context, td TodoistAPI, projectID string, e blogfeed.Entry, drafts Drafts, due map[Cadence]time.Time) ([]TaskRef, error) {
+	refs := make([]TaskRef, 0, 9)
 	for _, p := range AllPlatforms {
 		for _, c := range AllCadences {
 			req := todoist.CreateRequest{
@@ -184,22 +187,22 @@ func createSeries(ctx context.Context, td TodoistAPI, projectID string, e blogfe
 			}
 			t, err := td.CreateTask(ctx, req)
 			if err != nil {
-				return ids, err
+				return refs, err
 			}
-			ids = append(ids, t.ID)
+			refs = append(refs, TaskRef{Platform: p, Cadence: c, TodoistID: t.ID})
 		}
 	}
-	return ids, nil
+	return refs, nil
 }
 
 // rollback best-effort deletes already-created tasks. Errors are recorded as
 // span events and dropped — partial-failure recovery does not block retry.
-func rollback(ctx context.Context, td TodoistAPI, ids []string) {
+func rollback(ctx context.Context, td TodoistAPI, refs []TaskRef) {
 	span := trace.SpanFromContext(ctx) // never nil; no-op if no active span
-	for _, id := range ids {
-		if err := td.DeleteTask(ctx, id); err != nil {
+	for _, r := range refs {
+		if err := td.DeleteTask(ctx, r.TodoistID); err != nil {
 			span.AddEvent("rollback delete failed", trace.WithAttributes(
-				attribute.String("task_id", id),
+				attribute.String("task_id", r.TodoistID),
 				attribute.String("error", err.Error()),
 			))
 		}
