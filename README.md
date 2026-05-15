@@ -46,6 +46,7 @@ Open Jaeger at <http://localhost:16686>.
 | `darek doctor` | Health check (Postgres, OTEL, OpenAI, configured sources). |
 | `darek blog sync` | Poll each configured blog RSS feed; for new posts, create 9 marketing tasks in Todoist (X / Mastodon / LinkedIn × launch / +2w / +3mo). |
 | `darek blog publish` | Scan the Todoist Marketing project(s) for due-now tasks and publish them to the configured social account (Mastodon today; X / LinkedIn later). |
+| `darek blog regenerate` | Find Todoist tasks carrying the `regenerate` label and rewrite their content with a fresh LLM draft for that one (platform, cadence) cell. |
 | `darek serve` | HTTP server on `127.0.0.1:7777` (RSS inbox UI + background pollers). |
 | `darek calendar refresh-token <nickname>` | Run the Google OAuth flow for one configured Google calendar. |
 | `darek calendar daily-digest` | Send a 3-day calendar digest email (today + 2 days). |
@@ -267,6 +268,10 @@ Per-account setup for Mastodon:
    ```
 
 Idempotency: a `Mastodon-Idempotency-Key` derived from the Todoist task ID dedups retries on Mastodon's side, and `blog_post_tasks.posted_at` persists locally so a `CompleteTask` failure doesn't republish on the next tick.
+
+### Re-rolling a single draft
+
+If the LLM gave you a draft you don't like, add the `regenerate` label to that Todoist task. `darek serve` scans for the label every 5 minutes (or run `darek blog regenerate` one-shot) and rewrites just that one cell — the platform/cadence labels and due date are preserved, the `regenerate` label is stripped on success. The drafter sees the same entry meta captured at scheduling time, so re-roll works even for posts that have aged out of the RSS feed.
 
 ### Failure modes
 

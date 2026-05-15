@@ -145,6 +145,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 
 	var blogSync serve.SyncFn
 	var blogPublish serve.SyncFn
+	var blogRegenerate serve.SyncFn
 	if len(cfg.BlogMarketing.Feeds) > 0 {
 		apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
 		if err != nil {
@@ -189,6 +190,19 @@ func runServe(ctx context.Context, cfgPath string) error {
 			}
 			return fmt.Sprintf("published=%d completion_retried=%d skipped=%d errors=%d",
 				res.Published, res.CompletionRetried, res.Skipped, len(res.Errors)), nil
+		}
+
+		// Re-roll loop: scan Todoist for the `regenerate` label and rewrite
+		// the matching cell. 5min cadence matches the user's mental model of
+		// "I labelled it, give me a fresh draft within a few minutes."
+		regenAccounts := buildBlogRegenerateAccounts(cfg.BlogMarketing)
+		blogRegenerate = func(ctx context.Context) (string, error) {
+			res, err := blogmarketing.Regenerate(ctx, bmStore, td, drafter, regenAccounts)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("regenerated=%d skipped=%d errors=%d",
+				res.Regenerated, res.Skipped, len(res.Errors)), nil
 		}
 	}
 
@@ -238,6 +252,9 @@ func runServe(ctx context.Context, cfgPath string) error {
 	// cadence in the spec; if that proves wrong, add a knob then.
 	if blogPublish != nil {
 		go runSyncLoop(ctx, blogPublish, time.Hour, "blog-publish")
+	}
+	if blogRegenerate != nil {
+		go runSyncLoop(ctx, blogRegenerate, 5*time.Minute, "blog-regenerate")
 	}
 
 	if cfg.ExecutionHistory.Enabled {

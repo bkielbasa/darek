@@ -9,7 +9,14 @@ import (
 	"time"
 
 	"darek/db"
+	"darek/tools/blogfeed"
 )
+
+// ErrEntryMetaMissing is returned by GetEntry when a row pre-dates the
+// 0014 migration — entry_url / entry_title / entry_summary are NULL. The
+// regenerate orchestrator surfaces this so the user knows to either
+// re-schedule the campaign or fix the task by hand.
+var ErrEntryMetaMissing = fmt.Errorf("blog post entry meta not captured (pre-0014 row)")
 
 // TaskRef identifies one of the 9 Todoist tasks created for a blog post,
 // together with the cell (platform, cadence) it represents.
@@ -59,13 +66,15 @@ func (s *Store) IsScheduled(ctx context.Context, canonicalURL string) (bool, err
 
 // MarkSeenOnly inserts a parent row with scheduled_at=NULL and no task rows.
 // Used by first-run backfill: the post is recorded as known so we don't
-// re-schedule it later, but no Todoist tasks were created.
-func (s *Store) MarkSeenOnly(ctx context.Context, canonicalURL, blogID string, publishedAt time.Time) error {
+// re-schedule it later, but no Todoist tasks were created. Entry meta
+// (url/title/summary) is persisted so a later regenerate run can re-draft
+// even if the post has aged out of the RSS feed.
+func (s *Store) MarkSeenOnly(ctx context.Context, e blogfeed.Entry, blogID string) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO blog_posts_scheduled (canonical_url, blog_id, published_at)
-		 VALUES ($1, $2, $3)
+		`INSERT INTO blog_posts_scheduled (canonical_url, blog_id, published_at, entry_url, entry_title, entry_summary)
+		 VALUES ($1, $2, $3, $4, $5, $6)
 		 ON CONFLICT (canonical_url) DO NOTHING`,
-		canonicalURL, blogID, publishedAt,
+		e.CanonicalURL, blogID, e.PublishedAt, e.URL, e.Title, e.Summary,
 	)
 	if err != nil {
 		return fmt.Errorf("mark_seen_only: %w", err)
@@ -74,11 +83,12 @@ func (s *Store) MarkSeenOnly(ctx context.Context, canonicalURL, blogID string, p
 }
 
 // SaveTasks atomically inserts the parent `blog_posts_scheduled` row (with
-// scheduled_at = now()) together with one `blog_post_tasks` row per ref.
-// If the parent row already exists (re-poll race), the INSERT is a no-op and
-// the task rows are still attempted; that path is not expected in normal use
-// but is harmless because (canonical_url, platform, cadence) is the PK.
-func (s *Store) SaveTasks(ctx context.Context, canonicalURL, blogID string, publishedAt time.Time, refs []TaskRef) error {
+// scheduled_at = now() AND entry meta) together with one `blog_post_tasks`
+// row per ref. If the parent row already exists (re-poll race), the INSERT
+// is a no-op and the task rows are still attempted; that path is not expected
+// in normal use but is harmless because (canonical_url, platform, cadence)
+// is the PK.
+func (s *Store) SaveTasks(ctx context.Context, e blogfeed.Entry, blogID string, refs []TaskRef) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("save_tasks begin: %w", err)
@@ -86,10 +96,10 @@ func (s *Store) SaveTasks(ctx context.Context, canonicalURL, blogID string, publ
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO blog_posts_scheduled (canonical_url, blog_id, published_at, scheduled_at)
-		 VALUES ($1, $2, $3, now())
+		`INSERT INTO blog_posts_scheduled (canonical_url, blog_id, published_at, scheduled_at, entry_url, entry_title, entry_summary)
+		 VALUES ($1, $2, $3, now(), $4, $5, $6)
 		 ON CONFLICT (canonical_url) DO NOTHING`,
-		canonicalURL, blogID, publishedAt,
+		e.CanonicalURL, blogID, e.PublishedAt, e.URL, e.Title, e.Summary,
 	); err != nil {
 		return fmt.Errorf("save_tasks scheduled: %w", err)
 	}
@@ -106,7 +116,7 @@ func (s *Store) SaveTasks(ctx context.Context, canonicalURL, blogID string, publ
 		`INSERT INTO blog_post_tasks (canonical_url, platform, cadence, todoist_id)
 		 SELECT $1, p, c, i
 		 FROM unnest($2::text[], $3::text[], $4::text[]) AS x(p, c, i)`,
-		canonicalURL, platforms, cadences, ids,
+		e.CanonicalURL, platforms, cadences, ids,
 	); err != nil {
 		return fmt.Errorf("save_tasks tasks: %w", err)
 	}
@@ -115,6 +125,41 @@ func (s *Store) SaveTasks(ctx context.Context, canonicalURL, blogID string, publ
 		return fmt.Errorf("save_tasks commit: %w", err)
 	}
 	return nil
+}
+
+// GetEntry returns the blog entry meta captured at scheduling time. Returns
+// pgx.ErrNoRows if the canonical URL is unknown, and ErrEntryMetaMissing if
+// the row exists but pre-dates the 0014 migration (entry_url/title/summary
+// are NULL).
+func (s *Store) GetEntry(ctx context.Context, canonicalURL string) (*blogfeed.Entry, error) {
+	var (
+		publishedAt time.Time
+		entryURL    *string
+		title       *string
+		summary     *string
+	)
+	err := s.pool.QueryRow(ctx,
+		`SELECT published_at, entry_url, entry_title, entry_summary
+		 FROM blog_posts_scheduled
+		 WHERE canonical_url = $1`,
+		canonicalURL,
+	).Scan(&publishedAt, &entryURL, &title, &summary)
+	if err != nil {
+		return nil, err
+	}
+	if entryURL == nil || title == nil {
+		return nil, ErrEntryMetaMissing
+	}
+	e := &blogfeed.Entry{
+		CanonicalURL: canonicalURL,
+		URL:          *entryURL,
+		Title:        *title,
+		PublishedAt:  publishedAt,
+	}
+	if summary != nil {
+		e.Summary = *summary
+	}
+	return e, nil
 }
 
 // GetTasks returns the task refs for a post in stable (platform, cadence)

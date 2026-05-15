@@ -10,6 +10,7 @@ import (
 	"darek/blogmarketing"
 	"darek/db"
 	"darek/internal/testutil/pg"
+	"darek/tools/blogfeed"
 
 	"github.com/stretchr/testify/require"
 )
@@ -29,8 +30,13 @@ func TestStore_RoundTrip(t *testing.T) {
 	require.False(t, scheduled)
 
 	// Seen-only path (per-blog first-run backfill).
-	require.NoError(t, store.MarkSeenOnly(ctx, "https://blog.example.com/old", "tech-blog",
-		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+	require.NoError(t, store.MarkSeenOnly(ctx, blogfeed.Entry{
+		CanonicalURL: "https://blog.example.com/old",
+		URL:          "https://blog.example.com/old",
+		Title:        "Old Post",
+		Summary:      "Old summary",
+		PublishedAt:  time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	}, "tech-blog"))
 
 	count, err = store.Count(ctx, "tech-blog")
 	require.NoError(t, err)
@@ -56,12 +62,13 @@ func TestStore_RoundTrip(t *testing.T) {
 			})
 		}
 	}
-	require.NoError(t, store.SaveTasks(ctx,
-		"https://blog.example.com/new",
-		"tech-blog",
-		time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC),
-		refs,
-	))
+	require.NoError(t, store.SaveTasks(ctx, blogfeed.Entry{
+		CanonicalURL: "https://blog.example.com/new",
+		URL:          "https://blog.example.com/new?utm=rss",
+		Title:        "New post",
+		Summary:      "Hello world",
+		PublishedAt:  time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC),
+	}, "tech-blog", refs))
 
 	scheduled, err = store.IsScheduled(ctx, "https://blog.example.com/new")
 	require.NoError(t, err)
@@ -91,6 +98,18 @@ func TestStore_RoundTrip(t *testing.T) {
 	// MarkPosted on an unknown id reports the miss explicitly.
 	require.Error(t, store.MarkPosted(ctx, "no-such-id", "url"))
 
+	// GetEntry reads back the persisted meta verbatim, so a future regenerate
+	// has everything it needs without re-fetching the feed.
+	entry, err := store.GetEntry(ctx, "https://blog.example.com/new")
+	require.NoError(t, err)
+	require.Equal(t, "New post", entry.Title)
+	require.Equal(t, "Hello world", entry.Summary)
+	require.Equal(t, "https://blog.example.com/new?utm=rss", entry.URL)
+
 	// Idempotency: re-marking is fine (PRIMARY KEY conflict swallowed via ON CONFLICT DO NOTHING).
-	require.NoError(t, store.MarkSeenOnly(ctx, "https://blog.example.com/old", "tech-blog", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(ctx, blogfeed.Entry{
+		CanonicalURL: "https://blog.example.com/old",
+		Title:        "x",
+		PublishedAt:  time.Now(),
+	}, "tech-blog"))
 }

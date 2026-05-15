@@ -122,7 +122,7 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 			continue
 		}
 		if firstRun {
-			if err := store.MarkSeenOnly(ctx, e.CanonicalURL, cfg.BlogID, e.PublishedAt); err != nil {
+			if err := store.MarkSeenOnly(ctx, e, cfg.BlogID); err != nil {
 				res.Errors = append(res.Errors, fmt.Errorf("%s: mark_seen_only: %w", e.CanonicalURL, err))
 				continue
 			}
@@ -158,7 +158,7 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 			res.Errors = append(res.Errors, fmt.Errorf("%s: create series: %w", e.CanonicalURL, err))
 			continue
 		}
-		if err := store.SaveTasks(ctx, e.CanonicalURL, cfg.BlogID, e.PublishedAt, refs); err != nil {
+		if err := store.SaveTasks(ctx, e, cfg.BlogID, refs); err != nil {
 			// State write failed AFTER all 9 tasks landed — log but DON'T roll back
 			// (would delete real Todoist tasks the user can see); next poll will
 			// re-detect via the feed but IsScheduled will return false, so it will

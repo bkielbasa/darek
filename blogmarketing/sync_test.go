@@ -108,6 +108,15 @@ func setup(t *testing.T) *blogmarketing.Store {
 	return blogmarketing.NewStore(db.Wrap(raw))
 }
 
+func seedEntry(url string) blogfeed.Entry {
+	return blogfeed.Entry{
+		CanonicalURL: url,
+		URL:          url,
+		Title:        "seed",
+		PublishedAt:  time.Now(),
+	}
+}
+
 func cfg(t *testing.T) blogmarketing.Config {
 	return blogmarketing.Config{
 		BlogID:      "tech-blog",
@@ -142,7 +151,7 @@ func TestSync_FirstRun_MarksSeenOnly_NoTasks(t *testing.T) {
 func TestSync_NewPost_Schedules9Tasks(t *testing.T) {
 	store := setup(t)
 	// Pre-seed table so we are NOT in first-run mode.
-	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", "tech-blog", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(), seedEntry("https://example.com/seed"), "tech-blog"))
 
 	pubAt := time.Now().Add(-30 * time.Minute)
 	feed := &fakeFeed{entries: []blogfeed.Entry{
@@ -173,7 +182,7 @@ func TestSync_NewPost_Schedules9Tasks(t *testing.T) {
 
 func TestSync_TodoistMidFailure_RollsBack(t *testing.T) {
 	store := setup(t)
-	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", "tech-blog", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(), seedEntry("https://example.com/seed"), "tech-blog"))
 
 	feed := &fakeFeed{entries: []blogfeed.Entry{
 		{URL: "https://example.com/x", CanonicalURL: "https://example.com/x", Title: "X", PublishedAt: time.Now()},
@@ -195,7 +204,7 @@ func TestSync_TodoistMidFailure_RollsBack(t *testing.T) {
 
 func TestSync_DrafterFailure_NoTasks_NoState(t *testing.T) {
 	store := setup(t)
-	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", "tech-blog", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(), seedEntry("https://example.com/seed"), "tech-blog"))
 
 	feed := &fakeFeed{entries: []blogfeed.Entry{
 		{URL: "https://example.com/x", CanonicalURL: "https://example.com/x", Title: "X", PublishedAt: time.Now()},
@@ -226,7 +235,7 @@ func TestSync_FirstRunIsPerBlog(t *testing.T) {
 
 	// Seed an unrelated blog so the table is non-empty globally.
 	require.NoError(t, store.MarkSeenOnly(context.Background(),
-		"https://other.example.com/old", "side-blog", time.Now()))
+		seedEntry("https://other.example.com/old"), "side-blog"))
 
 	// tech-blog still has zero rows → must be treated as first-run for it,
 	// even though the table itself is non-empty.
@@ -245,9 +254,9 @@ func TestSyncAll_OneBlogFailureDoesNotStopOthers(t *testing.T) {
 	store := setup(t)
 	// Pre-seed both blogs so neither hits first-run backfill.
 	require.NoError(t, store.MarkSeenOnly(context.Background(),
-		"https://example.com/seed-a", "blog-a", time.Now()))
+		seedEntry("https://example.com/seed-a"), "blog-a"))
 	require.NoError(t, store.MarkSeenOnly(context.Background(),
-		"https://example.com/seed-b", "blog-b", time.Now()))
+		seedEntry("https://example.com/seed-b"), "blog-b"))
 
 	td := &fakeTodoist{projectID: "P", failOnIndex: -1}
 
@@ -278,7 +287,7 @@ func TestSyncAll_OneBlogFailureDoesNotStopOthers(t *testing.T) {
 
 func TestSync_LaunchDateIsMaxOfPubAndNow(t *testing.T) {
 	store := setup(t)
-	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", "tech-blog", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(), seedEntry("https://example.com/seed"), "tech-blog"))
 
 	loc := warsaw(t)
 	old := time.Now().In(loc).Add(-72 * time.Hour) // 3 days ago
