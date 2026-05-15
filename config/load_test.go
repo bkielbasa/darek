@@ -52,11 +52,17 @@ blog_marketing:
     - id: tech-blog
       feed_url: https://blog.example.com/feed.xml
       accounts:
-        x: "@bk_tech"
-        mastodon: "@bk@fosstodon.org"
+        x:
+          handle: "@bk_tech"
+        mastodon:
+          handle: "@bk@fosstodon.org"
+          instance: https://fosstodon.org
+          token_env: DAREK_TECH_MASTODON_TOKEN
     - id: side-blog
       feed_url: https://other.example.com/feed.xml
-      accounts: { x: "@bk_side" }
+      accounts:
+        x:
+          handle: "@bk_side"
       project_name: Marketing-Side
 `), 0o600))
 	cfg, err := Load(p)
@@ -65,7 +71,9 @@ blog_marketing:
 	require.Equal(t, "09:00", cfg.BlogMarketing.PostTime)
 	require.Len(t, cfg.BlogMarketing.Feeds, 2)
 	require.Equal(t, "tech-blog", cfg.BlogMarketing.Feeds[0].ID)
-	require.Equal(t, "@bk_tech", cfg.BlogMarketing.Feeds[0].Accounts["x"])
+	require.Equal(t, "@bk_tech", cfg.BlogMarketing.Feeds[0].Accounts["x"].Handle)
+	require.Equal(t, "https://fosstodon.org", cfg.BlogMarketing.Feeds[0].Accounts["mastodon"].Instance)
+	require.Equal(t, "DAREK_TECH_MASTODON_TOKEN", cfg.BlogMarketing.Feeds[0].Accounts["mastodon"].TokenEnv)
 	require.Equal(t, "Marketing-Side", cfg.BlogMarketing.Feeds[1].ProjectName)
 }
 
@@ -134,6 +142,31 @@ blog_marketing:
 	require.Len(t, cfg.BlogMarketing.Feeds, 1)
 	// Per-feed values used because root defaults are empty.
 	require.Equal(t, "08:30", cfg.BlogMarketing.Feeds[0].PostTime)
+}
+
+func TestLoad_BlogMarketing_AccountMissingHandle(t *testing.T) {
+	t.Setenv("X", "test")
+	t.Setenv("K", "test")
+	dir := t.TempDir()
+	p := filepath.Join(dir, "c.yaml")
+	require.NoError(t, os.WriteFile(p, []byte(`
+postgres: {url_env: X}
+openai: {api_key_env: K, model: gpt-4.1}
+otel: {service_name: t, exporter_endpoint: localhost:4317}
+blog_marketing:
+  project_name: Marketing
+  post_time: "09:00"
+  feeds:
+    - id: a
+      feed_url: https://blog.example.com/feed.xml
+      accounts:
+        mastodon:
+          instance: https://fosstodon.org
+          token_env: T
+`), 0o600))
+	_, err := Load(p)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "handle")
 }
 
 func TestLoad_BlogMarketing_DuplicateFeedID(t *testing.T) {

@@ -147,17 +147,68 @@ func (s *Store) GetTasks(ctx context.Context, canonicalURL string) ([]TaskRef, e
 	return refs, nil
 }
 
-// LookupTask reverse-maps a Todoist task id back to the (post, platform,
-// cadence) cell it belongs to. Returns pgx.ErrNoRows if the id is not one
-// we created. Used by the future regenerate-label scanner.
-func (s *Store) LookupTask(ctx context.Context, todoistID string) (canonicalURL string, platform Platform, cadence Cadence, err error) {
-	var p, c string
-	err = s.pool.QueryRow(ctx,
-		`SELECT canonical_url, platform, cadence FROM blog_post_tasks WHERE todoist_id = $1`,
+// TaskState is everything we know in our DB about one scheduled Todoist task.
+// PostedAt is nil if the auto-poster hasn't successfully published this cell;
+// non-nil means the post was sent (and Todoist might or might not be marked
+// completed yet — that's a separate concern).
+type TaskState struct {
+	CanonicalURL string
+	BlogID       string
+	Platform     Platform
+	Cadence      Cadence
+	TodoistID    string
+	PostedAt     *time.Time
+	PostedURL    string
+}
+
+// GetTaskState reverse-maps a Todoist task id to its full cell state. Returns
+// pgx.ErrNoRows if the id is not one we created — the auto-poster uses that
+// as the "not our task, skip" signal. Used in place of the older LookupTask.
+func (s *Store) GetTaskState(ctx context.Context, todoistID string) (*TaskState, error) {
+	var (
+		st        TaskState
+		platform  string
+		cadence   string
+		postedAt  *time.Time
+		postedURL *string
+	)
+	st.TodoistID = todoistID
+	err := s.pool.QueryRow(ctx,
+		`SELECT t.canonical_url, s.blog_id, t.platform, t.cadence, t.posted_at, t.posted_url
+		 FROM blog_post_tasks t
+		 JOIN blog_posts_scheduled s ON s.canonical_url = t.canonical_url
+		 WHERE t.todoist_id = $1`,
 		todoistID,
-	).Scan(&canonicalURL, &p, &c)
+	).Scan(&st.CanonicalURL, &st.BlogID, &platform, &cadence, &postedAt, &postedURL)
 	if err != nil {
-		return "", "", "", err
+		return nil, err
 	}
-	return canonicalURL, Platform(p), Cadence(c), nil
+	st.Platform = Platform(platform)
+	st.Cadence = Cadence(cadence)
+	st.PostedAt = postedAt
+	if postedURL != nil {
+		st.PostedURL = *postedURL
+	}
+	return &st, nil
+}
+
+// MarkPosted records a successful publish: sets posted_at=now() and posted_url
+// on the matching blog_post_tasks row. Idempotent: if posted_at is already
+// set, the row is re-written with a newer timestamp (rare — only happens
+// when CompleteTask fails and the orchestrator retries; the actual publish
+// is deduped at the Mastodon side via Idempotency-Key).
+func (s *Store) MarkPosted(ctx context.Context, todoistID, postedURL string) error {
+	tag, err := s.pool.Exec(ctx,
+		`UPDATE blog_post_tasks
+		 SET posted_at = now(), posted_url = $2
+		 WHERE todoist_id = $1`,
+		todoistID, postedURL,
+	)
+	if err != nil {
+		return fmt.Errorf("mark_posted: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("mark_posted: no row for todoist_id %s", todoistID)
+	}
+	return nil
 }

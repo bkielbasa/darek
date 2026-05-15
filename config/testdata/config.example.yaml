@@ -66,15 +66,22 @@ blog_marketing:
     - id: tech-blog
       feed_url: https://blog.example.com/feed.xml
       accounts:
-        x: "@bk_tech"
-        mastodon: "@bk@fosstodon.org"
-        linkedin: "bartlomiej-klimczak"
+        x:
+          handle: "@bk_tech"
+          # token_env: DAREK_TECH_X_TOKEN  # set when X auto-poster lands
+        mastodon:
+          handle: "@bk@fosstodon.org"
+          instance: https://fosstodon.org
+          token_env: DAREK_TECH_MASTODON_TOKEN
+        linkedin:
+          handle: "bartlomiej-klimczak"
     - id: side-blog
       feed_url: https://other.example.com/feed.xml
       accounts:
-        x: "@bk_side"
-        mastodon: "@bk_side@mastodon.social"
-        linkedin: "bartlomiej-klimczak"
+        mastodon:
+          handle: "@bk_side@mastodon.social"
+          instance: https://mastodon.social
+          token_env: DAREK_SIDE_MASTODON_TOKEN
       project_name: Marketing-Side  # opt-in per-blog override
 
 auth:

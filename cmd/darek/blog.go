@@ -15,11 +15,70 @@ import (
 	"darek/llm"
 	"darek/obs"
 	"darek/tools/blogfeed"
+	"darek/tools/mastodon"
 	"darek/tools/todoist"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 )
+
+// buildBlogPublishConfig builds the PublishConfig + a deduped list of
+// Todoist project IDs the auto-poster needs to scan. For each (blog,
+// platform) pair where a token_env is configured AND its env var is set,
+// it constructs the matching Publisher; missing creds → that (blog, platform)
+// is silently skipped at publish time (matches drafter-without-poster path).
+//
+// Returns an error only on transport-level Todoist failures (ResolveProjectID
+// network errors) — bad/empty secrets surface as nil publishers, NOT as
+// hard config errors, because the user may legitimately set up auto-posting
+// for some accounts before others.
+func buildBlogPublishConfig(ctx context.Context, bm config.BlogMarketing, td *todoist.Client) (*blogmarketing.PublishConfig, []string, error) {
+	pc := blogmarketing.NewPublishConfig()
+	seenProjects := map[string]bool{}
+	var projectIDs []string
+
+	for _, f := range bm.Feeds {
+		projectName := f.ProjectName
+		if projectName == "" {
+			projectName = bm.ProjectName
+		}
+		if !seenProjects[projectName] {
+			seenProjects[projectName] = true
+			pid, err := td.ResolveProjectID(ctx, projectName)
+			if err != nil {
+				return nil, nil, fmt.Errorf("resolve project %q (blog %s): %w", projectName, f.ID, err)
+			}
+			projectIDs = append(projectIDs, pid)
+		}
+
+		for plat, acc := range f.Accounts {
+			if acc.TokenEnv == "" {
+				continue // no auto-poster credentials yet for this (blog, platform)
+			}
+			token, err := config.ResolveSecret("env:" + acc.TokenEnv)
+			if err != nil || token == "" {
+				// Env var unset or empty: skip silently. Surfaces in
+				// `darek doctor` if we extend it; not a hard error here.
+				continue
+			}
+			switch blogmarketing.Platform(plat) {
+			case blogmarketing.PlatformMastodon:
+				if acc.Instance == "" {
+					return nil, nil, fmt.Errorf("blog %s mastodon: token_env is set but instance is missing", f.ID)
+				}
+				mc, err := mastodon.New(mastodon.Options{Instance: acc.Instance, Token: token})
+				if err != nil {
+					return nil, nil, fmt.Errorf("blog %s mastodon: %w", f.ID, err)
+				}
+				pc.Register(f.ID, blogmarketing.PlatformMastodon, blogmarketing.NewMastodonPublisher(mc))
+			default:
+				// X / LinkedIn auto-posters not implemented yet; configuring
+				// token_env is harmless (no publisher registered → skip).
+			}
+		}
+	}
+	return pc, projectIDs, nil
+}
 
 // buildBlogFeedRuns translates config.BlogMarketing into a slice of
 // blogmarketing.FeedRun ready for SyncAll. Each feed inherits root-level
@@ -52,9 +111,11 @@ func buildBlogFeedRuns(bm config.BlogMarketing) ([]blogmarketing.FeedRun, error)
 				return nil, fmt.Errorf("blog %s: timezone: %w", f.ID, err)
 			}
 		}
+		// Drafter only needs the handle string per platform; instance/token_env
+		// are for the auto-poster and resolved elsewhere.
 		accounts := make(map[blogmarketing.Platform]string, len(f.Accounts))
 		for k, v := range f.Accounts {
-			accounts[blogmarketing.Platform(k)] = v
+			accounts[blogmarketing.Platform(k)] = v.Handle
 		}
 		runs = append(runs, blogmarketing.FeedRun{
 			Feed: feed,
@@ -72,13 +133,15 @@ func buildBlogFeedRuns(bm config.BlogMarketing) ([]blogmarketing.FeedRun, error)
 
 func runBlog(ctx context.Context, cfgPath string, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: darek blog sync")
+		return fmt.Errorf("usage: darek blog (sync|publish)")
 	}
 	switch args[0] {
 	case "sync":
 		return runBlogSync(ctx, cfgPath)
+	case "publish":
+		return runBlogPublish(ctx, cfgPath)
 	default:
-		return fmt.Errorf("unknown blog subcommand %q (try: sync)", args[0])
+		return fmt.Errorf("unknown blog subcommand %q (try: sync, publish)", args[0])
 	}
 }
 
@@ -158,6 +221,79 @@ func runBlogSync(ctx context.Context, cfgPath string) (retErr error) {
 	}
 	if len(res.Errors) > 0 {
 		return fmt.Errorf("%d errors during sync", len(res.Errors))
+	}
+	return nil
+}
+
+func runBlogPublish(ctx context.Context, cfgPath string) (retErr error) {
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+	if len(cfg.BlogMarketing.Feeds) == 0 {
+		return fmt.Errorf("blog_marketing.feeds is empty in %s", cfgPath)
+	}
+	dsn, err := config.ResolveSecret("env:" + cfg.Postgres.URLEnv)
+	if err != nil {
+		return err
+	}
+	otelSetup, otelShutdown, err := obs.Init(ctx, obs.Options{
+		ServiceName: cfg.OTEL.ServiceName,
+		Endpoint:    cfg.OTEL.ExporterEndpoint,
+		Insecure:    cfg.OTEL.Insecure,
+	})
+	if err != nil {
+		return fmt.Errorf("otel init: %w", err)
+	}
+	defer func() { _ = otelShutdown(context.Background()) }()
+
+	pool, err := db.Open(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("db: %w", err)
+	}
+	defer pool.Close()
+
+	if cfg.ExecutionHistory.Enabled {
+		otelSetup.TracerProvider.RegisterSpanProcessor(
+			exechistory.NewRecorder(pool, slog.Default()))
+	}
+
+	ctx, span := otel.Tracer("darek/cli").Start(ctx, "cli.blog.publish")
+	exechistory.MarkExecution(span, "cli-blog-publish")
+	defer func() {
+		if retErr != nil {
+			span.RecordError(retErr)
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
+
+	tdToken, err := config.ResolveSecret("env:" + cfg.Todoist.TokenEnv)
+	if err != nil {
+		return fmt.Errorf("todoist token: %w", err)
+	}
+	td, err := todoist.New(todoist.Options{Token: tdToken})
+	if err != nil {
+		return fmt.Errorf("todoist client: %w", err)
+	}
+
+	pc, projectIDs, err := buildBlogPublishConfig(ctx, cfg.BlogMarketing, td)
+	if err != nil {
+		return err
+	}
+	store := blogmarketing.NewStore(pool)
+
+	res, err := blogmarketing.Publish(ctx, store, td, pc, projectIDs)
+	if err != nil {
+		return fmt.Errorf("publish: %w", err)
+	}
+	fmt.Printf("blog publish: published=%d completion_retried=%d skipped=%d errors=%d\n",
+		res.Published, res.CompletionRetried, res.Skipped, len(res.Errors))
+	for _, e := range res.Errors {
+		fmt.Fprintf(os.Stderr, "  err: %v\n", e)
+	}
+	if len(res.Errors) > 0 {
+		return fmt.Errorf("%d errors during publish", len(res.Errors))
 	}
 	return nil
 }

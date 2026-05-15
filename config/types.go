@@ -85,16 +85,35 @@ type BlogMarketing struct {
 }
 
 // BlogFeed is one blog's worth of config. ID is the stable identifier persisted
-// in blog_posts_scheduled.blog_id. Accounts map platform name ("x", "mastodon",
-// "linkedin") to the user-visible handle the LLM is told to weave into copy.
+// in blog_posts_scheduled.blog_id. Accounts maps platform name ("x", "mastodon",
+// "linkedin") to per-platform account credentials and metadata.
 // ProjectName/PostTime/Timezone, if empty, fall back to the BlogMarketing root.
 type BlogFeed struct {
-	ID          string            `yaml:"id"`
-	FeedURL     string            `yaml:"feed_url"`
-	Accounts    map[string]string `yaml:"accounts"`
-	ProjectName string            `yaml:"project_name"` // optional override
-	PostTime    string            `yaml:"post_time"`    // optional override
-	Timezone    string            `yaml:"timezone"`     // optional override
+	ID          string                   `yaml:"id"`
+	FeedURL     string                   `yaml:"feed_url"`
+	Accounts    map[string]AccountConfig `yaml:"accounts"`
+	ProjectName string                   `yaml:"project_name"` // optional override
+	PostTime    string                   `yaml:"post_time"`    // optional override
+	Timezone    string                   `yaml:"timezone"`     // optional override
+}
+
+// AccountConfig is one social-media account for a blog. Handle is the user-
+// visible identifier the LLM is told to weave into copy (e.g. "@bk@fosstodon.org").
+// Instance + TokenEnv are needed by the auto-poster; an entry with Handle
+// only is still valid for drafting but can't publish until secrets are set.
+type AccountConfig struct {
+	// Handle is the public display identifier (e.g. "@bk@fosstodon.org",
+	// "@bk_tech", "bartlomiej-klimczak"). Required.
+	Handle string `yaml:"handle"`
+
+	// Instance is the platform base URL the poster targets. Only meaningful
+	// for Mastodon (e.g. "https://fosstodon.org"). Other platforms ignore it.
+	Instance string `yaml:"instance"`
+
+	// TokenEnv is the environment variable name from which the auto-poster
+	// reads the API token / access token for this account. Empty disables
+	// posting for this (blog, platform) — drafting still works.
+	TokenEnv string `yaml:"token_env"`
 }
 
 type Server struct {

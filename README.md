@@ -44,7 +44,8 @@ Open Jaeger at <http://localhost:16686>.
 | `darek "<prompt>"` | One-shot agent run. |
 | `darek migrate` | Apply embedded SQL migrations to Postgres. |
 | `darek doctor` | Health check (Postgres, OTEL, OpenAI, configured sources). |
-| `darek blog sync` | Poll the configured blog RSS feed; for new posts, create 9 marketing tasks in Todoist (X / Mastodon / LinkedIn × launch / +2w / +3mo). |
+| `darek blog sync` | Poll each configured blog RSS feed; for new posts, create 9 marketing tasks in Todoist (X / Mastodon / LinkedIn × launch / +2w / +3mo). |
+| `darek blog publish` | Scan the Todoist Marketing project(s) for due-now tasks and publish them to the configured social account (Mastodon today; X / LinkedIn later). |
 | `darek serve` | HTTP server on `127.0.0.1:7777` (RSS inbox UI + background pollers). |
 | `darek calendar refresh-token <nickname>` | Run the Google OAuth flow for one configured Google calendar. |
 | `darek calendar daily-digest` | Send a 3-day calendar digest email (today + 2 days). |
@@ -235,9 +236,37 @@ First-run mode is detected per blog (`blog_id` column). The very first poll for 
 
 ```bash
 ./darek blog sync         # one-shot, cron-friendly
+./darek blog publish      # one-shot auto-poster pass
 ```
 
-`darek serve` polls the feed every `sync_interval` (parallel to FreshRSS / Todoist).
+`darek serve` polls the feeds every `sync_interval` (parallel to FreshRSS / Todoist) and runs the auto-poster every hour.
+
+### Auto-poster (Mastodon)
+
+When a Todoist task's `due_datetime` passes, the auto-poster publishes the task content to the corresponding social account and closes the task. Today only Mastodon is wired; X and LinkedIn entries with `handle` but no `token_env` are silently skipped (manual posting still works through Todoist).
+
+Per-account setup for Mastodon:
+
+1. In your Mastodon instance, **Preferences → Development → New application**.
+2. Name it `darek` (or similar). Scopes needed: `write:statuses` is enough.
+3. After creation, copy **Your access token**.
+4. Export it under the env var named in the feed config:
+
+   ```bash
+   export DAREK_TECH_MASTODON_TOKEN=...
+   ```
+
+5. Add to that feed's account block:
+
+   ```yaml
+   accounts:
+     mastodon:
+       handle: "@bk@fosstodon.org"      # for the LLM to weave into copy
+       instance: https://fosstodon.org  # where the auto-poster POSTs
+       token_env: DAREK_TECH_MASTODON_TOKEN
+   ```
+
+Idempotency: a `Mastodon-Idempotency-Key` derived from the Todoist task ID dedups retries on Mastodon's side, and `blog_post_tasks.posted_at` persists locally so a `CompleteTask` failure doesn't republish on the next tick.
 
 ### Failure modes
 

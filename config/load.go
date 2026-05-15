@@ -35,6 +35,19 @@ func validateBlogMarketing(bm *BlogMarketing) error {
 		if _, err := url.Parse(f.FeedURL); err != nil {
 			return fmt.Errorf("blog_marketing.feeds[%s].feed_url: %w", f.ID, err)
 		}
+		for plat, acc := range f.Accounts {
+			if acc.Handle == "" {
+				return fmt.Errorf("blog_marketing.feeds[%s].accounts.%s.handle required", f.ID, plat)
+			}
+			if acc.Instance != "" {
+				if _, err := url.Parse(acc.Instance); err != nil {
+					return fmt.Errorf("blog_marketing.feeds[%s].accounts.%s.instance: %w", f.ID, plat, err)
+				}
+			}
+			// token_env not validated for presence at config time (it's an env
+			// var that may be absent in non-poster contexts like darek doctor).
+			// The auto-poster surfaces missing tokens when it builds publishers.
+		}
 		// Effective fields = override or root default. Empty after merge ⇒ invalid.
 		effProject := f.ProjectName
 		if effProject == "" {

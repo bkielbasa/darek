@@ -144,6 +144,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 	}
 
 	var blogSync serve.SyncFn
+	var blogPublish serve.SyncFn
 	if len(cfg.BlogMarketing.Feeds) > 0 {
 		apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
 		if err != nil {
@@ -171,6 +172,23 @@ func runServe(ctx context.Context, cfgPath string) error {
 			res := blogmarketing.SyncAll(ctx, bmStore, drafter, td, runs)
 			return fmt.Sprintf("feeds=%d scheduled=%d backfill_seen=%d skipped=%d errors=%d",
 				len(runs), res.Scheduled, res.BackfillSeen, res.Skipped, len(res.Errors)), nil
+		}
+
+		// Auto-poster: resolve project IDs + per-(blog, platform) tokens once
+		// at startup. If any blog has token_env but the env var is empty, that
+		// (blog, platform) is silently absent — drafts still go to Todoist for
+		// manual posting, just no auto-publish.
+		pc, projectIDs, err := buildBlogPublishConfig(ctx, cfg.BlogMarketing, td)
+		if err != nil {
+			return fmt.Errorf("blog_marketing publish: %w", err)
+		}
+		blogPublish = func(ctx context.Context) (string, error) {
+			res, err := blogmarketing.Publish(ctx, bmStore, td, pc, projectIDs)
+			if err != nil {
+				return "", err
+			}
+			return fmt.Sprintf("published=%d completion_retried=%d skipped=%d errors=%d",
+				res.Published, res.CompletionRetried, res.Skipped, len(res.Errors)), nil
 		}
 	}
 
@@ -215,6 +233,11 @@ func runServe(ctx context.Context, cfgPath string) error {
 	}
 	if blogSync != nil && cfg.BlogMarketing.SyncInterval > 0 {
 		go runSyncLoop(ctx, blogSync, cfg.BlogMarketing.SyncInterval, "blog")
+	}
+	// Auto-poster runs on a fixed 1h interval. The user agreed to a hardcoded
+	// cadence in the spec; if that proves wrong, add a knob then.
+	if blogPublish != nil {
+		go runSyncLoop(ctx, blogPublish, time.Hour, "blog-publish")
 	}
 
 	if cfg.ExecutionHistory.Enabled {

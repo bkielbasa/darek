@@ -72,12 +72,24 @@ func TestStore_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 9)
 
-	// Reverse-lookup: LookupTask resolves any one of the ids back to its cell.
-	url, plat, cad, err := store.LookupTask(ctx, "id-x-launch")
+	// Reverse-lookup: GetTaskState resolves any one of the ids back to its cell.
+	state, err := store.GetTaskState(ctx, "id-x-launch")
 	require.NoError(t, err)
-	require.Equal(t, "https://blog.example.com/new", url)
-	require.Equal(t, blogmarketing.PlatformX, plat)
-	require.Equal(t, blogmarketing.CadenceLaunch, cad)
+	require.Equal(t, "https://blog.example.com/new", state.CanonicalURL)
+	require.Equal(t, "tech-blog", state.BlogID)
+	require.Equal(t, blogmarketing.PlatformX, state.Platform)
+	require.Equal(t, blogmarketing.CadenceLaunch, state.Cadence)
+	require.Nil(t, state.PostedAt, "freshly-saved task has no posted_at yet")
+
+	// MarkPosted updates posted_at + posted_url; GetTaskState picks up both.
+	require.NoError(t, store.MarkPosted(ctx, "id-x-launch", "https://fosstodon.org/@bk/abc"))
+	state, err = store.GetTaskState(ctx, "id-x-launch")
+	require.NoError(t, err)
+	require.NotNil(t, state.PostedAt)
+	require.Equal(t, "https://fosstodon.org/@bk/abc", state.PostedURL)
+
+	// MarkPosted on an unknown id reports the miss explicitly.
+	require.Error(t, store.MarkPosted(ctx, "no-such-id", "url"))
 
 	// Idempotency: re-marking is fine (PRIMARY KEY conflict swallowed via ON CONFLICT DO NOTHING).
 	require.NoError(t, store.MarkSeenOnly(ctx, "https://blog.example.com/old", "tech-blog", time.Now()))
