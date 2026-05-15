@@ -98,19 +98,27 @@ func runDoctor(ctx context.Context, cfgPath string) error {
 				add("oidc discovery", dErr, "")
 			}
 		}
-		if cfg.BlogMarketing.FeedURL != "" {
-			feed, err := blogfeed.New(blogfeed.Options{URL: cfg.BlogMarketing.FeedURL, Timeout: 5 * time.Second})
-			add("blog_marketing feed client", err, cfg.BlogMarketing.FeedURL)
-			if err == nil {
-				_, lErr := feed.List(ctx)
-				add("blog_marketing feed reachable", lErr, "ok")
-			}
+		if len(cfg.BlogMarketing.Feeds) > 0 {
+			var td *todoist.Client
 			if cfg.Todoist.TokenEnv != "" {
 				if tok, terr := config.ResolveSecret("env:" + cfg.Todoist.TokenEnv); terr == nil && tok != "" {
-					if td, terr := todoist.New(todoist.Options{Token: tok, Timeout: 5 * time.Second}); terr == nil {
-						_, rerr := td.ResolveProjectID(ctx, cfg.BlogMarketing.ProjectName)
-						add("blog_marketing project resolvable", rerr, fmt.Sprintf("project=%s", cfg.BlogMarketing.ProjectName))
+					td, _ = todoist.New(todoist.Options{Token: tok, Timeout: 5 * time.Second})
+				}
+			}
+			for _, f := range cfg.BlogMarketing.Feeds {
+				feed, err := blogfeed.New(blogfeed.Options{URL: f.FeedURL, Timeout: 5 * time.Second})
+				add(fmt.Sprintf("blog %s feed client", f.ID), err, f.FeedURL)
+				if err == nil {
+					_, lErr := feed.List(ctx)
+					add(fmt.Sprintf("blog %s feed reachable", f.ID), lErr, "ok")
+				}
+				if td != nil {
+					project := f.ProjectName
+					if project == "" {
+						project = cfg.BlogMarketing.ProjectName
 					}
+					_, rerr := td.ResolveProjectID(ctx, project)
+					add(fmt.Sprintf("blog %s project resolvable", f.ID), rerr, fmt.Sprintf("project=%s", project))
 				}
 			}
 		}

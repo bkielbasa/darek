@@ -33,14 +33,17 @@ type TodoistAPI interface {
 	GetTask(ctx context.Context, id string) (*todoist.Task, error)
 }
 
-// Config is the per-run configuration. PostTime is "HH:MM"; Timezone is the
-// location the schedule is anchored in (system local if nil).
+// Config is the per-blog per-run configuration. BlogID is the stable identifier
+// persisted in blog_posts_scheduled.blog_id (must match config). Accounts is
+// the per-platform handle map fed to the drafter so it can weave handles into
+// copy. PostTime is "HH:MM"; Timezone is the location the schedule is anchored
+// in (system local if nil).
 type Config struct {
-	FeedURL      string
-	ProjectName  string
-	PostTime     string
-	Timezone     *time.Location
-	SyncInterval time.Duration
+	BlogID      string
+	ProjectName string
+	PostTime    string
+	Timezone    *time.Location
+	Accounts    map[Platform]string
 }
 
 // Result is the aggregated outcome of one Sync call.
@@ -51,9 +54,15 @@ type Result struct {
 	Errors       []error // per-entry errors; do not abort sibling entries
 }
 
-// Sync polls the feed, schedules new posts, and returns aggregated counts.
+// Sync polls one blog's feed, schedules new posts, and returns aggregated
+// counts. Caller-facing batch entry point is SyncAll, which orchestrates one
+// Sync per configured feed.
 func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, td TodoistAPI, cfg Config) (*Result, error) {
-	ctx, span := tracer.Start(ctx, "blogmarketing.sync")
+	if cfg.BlogID == "" {
+		return nil, fmt.Errorf("blog_id required on Config")
+	}
+	ctx, span := tracer.Start(ctx, "blogmarketing.sync",
+		trace.WithAttributes(attribute.String("blog_id", cfg.BlogID)))
 	exechistory.MarkExecution(span, "blog-marketing-sync")
 	defer span.End()
 
@@ -69,7 +78,7 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 		return nil, fmt.Errorf("feed list: %w", err)
 	}
 
-	count, err := store.Count(ctx)
+	count, err := store.Count(ctx, cfg.BlogID)
 	if err != nil {
 		return nil, fmt.Errorf("store count: %w", err)
 	}
@@ -113,7 +122,7 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 			continue
 		}
 		if firstRun {
-			if err := store.MarkSeenOnly(ctx, e.CanonicalURL, e.PublishedAt); err != nil {
+			if err := store.MarkSeenOnly(ctx, e.CanonicalURL, cfg.BlogID, e.PublishedAt); err != nil {
 				res.Errors = append(res.Errors, fmt.Errorf("%s: mark_seen_only: %w", e.CanonicalURL, err))
 				continue
 			}
@@ -130,7 +139,7 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 			return res, fmt.Errorf("resolve project %q: %w", cfg.ProjectName, err)
 		}
 
-		drafts, err := drafter.Draft(ctx, e)
+		drafts, err := drafter.Draft(ctx, e, cfg.Accounts)
 		if err != nil {
 			res.Errors = append(res.Errors, fmt.Errorf("%s: draft: %w", e.CanonicalURL, err))
 			continue
@@ -149,7 +158,7 @@ func Sync(ctx context.Context, feed FeedLister, store *Store, drafter Drafter, t
 			res.Errors = append(res.Errors, fmt.Errorf("%s: create series: %w", e.CanonicalURL, err))
 			continue
 		}
-		if err := store.SaveTasks(ctx, e.CanonicalURL, e.PublishedAt, refs); err != nil {
+		if err := store.SaveTasks(ctx, e.CanonicalURL, cfg.BlogID, e.PublishedAt, refs); err != nil {
 			// State write failed AFTER all 9 tasks landed — log but DON'T roll back
 			// (would delete real Todoist tasks the user can see); next poll will
 			// re-detect via the feed but IsScheduled will return false, so it will
@@ -240,6 +249,36 @@ func outcome(r *Result) string {
 		return "partial"
 	}
 	return "ok"
+}
+
+// FeedRun pairs a feed lister with the per-blog Config to drive it. Built by
+// the CLI/serve wiring from cfg.BlogMarketing.Feeds and passed to SyncAll.
+type FeedRun struct {
+	Feed   FeedLister
+	Config Config
+}
+
+// SyncAll runs Sync once per FeedRun and returns an aggregate Result. A hard
+// failure on one feed (feed list HTTP, project not found, store count error)
+// is recorded as an error in the aggregate Result and the loop continues —
+// one bad blog must not silence the others. Per-entry errors are collected
+// in the per-Sync Result and bubbled up unchanged.
+func SyncAll(ctx context.Context, store *Store, drafter Drafter, td TodoistAPI, runs []FeedRun) *Result {
+	agg := &Result{}
+	for _, r := range runs {
+		res, err := Sync(ctx, r.Feed, store, drafter, td, r.Config)
+		if err != nil {
+			agg.Errors = append(agg.Errors, fmt.Errorf("blog %s: %w", r.Config.BlogID, err))
+			continue
+		}
+		agg.Scheduled += res.Scheduled
+		agg.BackfillSeen += res.BackfillSeen
+		agg.Skipped += res.Skipped
+		for _, perEntry := range res.Errors {
+			agg.Errors = append(agg.Errors, fmt.Errorf("blog %s: %w", r.Config.BlogID, perEntry))
+		}
+	}
+	return agg
 }
 
 func recordDuration(ctx context.Context, start time.Time, outcome string) {

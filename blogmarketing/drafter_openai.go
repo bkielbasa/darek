@@ -39,9 +39,12 @@ var AllCadences = []Cadence{CadenceLaunch, CadenceReshare2W, CadenceResurface3Mo
 // Drafts is the 3x3 grid of LLM-generated post text.
 type Drafts map[Platform]map[Cadence]string
 
-// Drafter produces post drafts for a feed entry.
+// Drafter produces post drafts for a feed entry. Accounts is the per-blog
+// handle map ({"x": "@bk_tech", ...}); empty / nil is fine and just means
+// "no account context, use a generic CTA". Values are user-facing handles —
+// the drafter must weave them into copy verbatim, not derive new ones.
 type Drafter interface {
-	Draft(ctx context.Context, e blogfeed.Entry) (Drafts, error)
+	Draft(ctx context.Context, e blogfeed.Entry, accounts map[Platform]string) (Drafts, error)
 }
 
 // Chat is the subset of *llm.Client that OpenAIDrafter uses. Defined as an
@@ -68,6 +71,11 @@ Platform constraints:
 - mastodon: under 500 characters. Use 2-4 hashtags placed inline or at the end.
 - linkedin: 2-4 short paragraphs, professional tone, hashtags at the very end.
 
+Account handles:
+- The user message may include an "Accounts" JSON object mapping platform to a handle string (e.g. "@bk_tech").
+- When a handle is provided, weave it into that platform's post naturally — typically as a CTA at the end ("More from @bk_tech →"), a self-ID ("— @bk_tech"), or wherever it reads cleanly. Use the handle verbatim. Do NOT invent handles.
+- If no handle is provided for a platform, omit the self-reference rather than fabricating one.
+
 Reply with strict JSON only, in this exact shape:
 {
   "x":        {"launch":"...","reshare":"...","resurface":"..."},
@@ -77,8 +85,21 @@ Reply with strict JSON only, in this exact shape:
 No prose outside the JSON. No markdown fences.`
 
 // Draft sends the entry to the model and parses out the 9 drafts.
-func (d *OpenAIDrafter) Draft(ctx context.Context, e blogfeed.Entry) (Drafts, error) {
+func (d *OpenAIDrafter) Draft(ctx context.Context, e blogfeed.Entry, accounts map[Platform]string) (Drafts, error) {
 	user := fmt.Sprintf("Title: %s\nURL: %s\nSummary:\n%s", e.Title, e.URL, e.Summary)
+	if len(accounts) > 0 {
+		// Use a stable key set so the prompt is deterministic across runs.
+		ordered := map[string]string{}
+		for _, p := range AllPlatforms {
+			if h, ok := accounts[p]; ok && h != "" {
+				ordered[string(p)] = h
+			}
+		}
+		if len(ordered) > 0 {
+			b, _ := json.Marshal(ordered)
+			user += "\nAccounts: " + string(b)
+		}
+	}
 	resp, err := d.llm.Chat(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
 			openai.SystemMessage(drafterSystemPrompt),

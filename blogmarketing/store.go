@@ -27,11 +27,16 @@ type Store struct {
 
 func NewStore(pool *db.Pool) *Store { return &Store{pool: pool} }
 
-// Count returns the total number of scheduled-or-seen posts. Used by the
-// orchestrator to detect "first-ever poll" mode (zero rows ⇒ backfill).
-func (s *Store) Count(ctx context.Context) (int, error) {
+// Count returns the number of scheduled-or-seen posts for one blog. Used by
+// the orchestrator to detect per-blog "first-ever poll" mode (zero rows for
+// THIS blog_id ⇒ backfill) — adding a new blog later does NOT spawn campaigns
+// for its existing back-catalog.
+func (s *Store) Count(ctx context.Context, blogID string) (int, error) {
 	var n int
-	if err := s.pool.QueryRow(ctx, "SELECT COUNT(*) FROM blog_posts_scheduled").Scan(&n); err != nil {
+	if err := s.pool.QueryRow(ctx,
+		"SELECT COUNT(*) FROM blog_posts_scheduled WHERE blog_id = $1",
+		blogID,
+	).Scan(&n); err != nil {
 		return 0, fmt.Errorf("count: %w", err)
 	}
 	return n, nil
@@ -55,12 +60,12 @@ func (s *Store) IsScheduled(ctx context.Context, canonicalURL string) (bool, err
 // MarkSeenOnly inserts a parent row with scheduled_at=NULL and no task rows.
 // Used by first-run backfill: the post is recorded as known so we don't
 // re-schedule it later, but no Todoist tasks were created.
-func (s *Store) MarkSeenOnly(ctx context.Context, canonicalURL string, publishedAt time.Time) error {
+func (s *Store) MarkSeenOnly(ctx context.Context, canonicalURL, blogID string, publishedAt time.Time) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO blog_posts_scheduled (canonical_url, published_at)
-		 VALUES ($1, $2)
+		`INSERT INTO blog_posts_scheduled (canonical_url, blog_id, published_at)
+		 VALUES ($1, $2, $3)
 		 ON CONFLICT (canonical_url) DO NOTHING`,
-		canonicalURL, publishedAt,
+		canonicalURL, blogID, publishedAt,
 	)
 	if err != nil {
 		return fmt.Errorf("mark_seen_only: %w", err)
@@ -73,7 +78,7 @@ func (s *Store) MarkSeenOnly(ctx context.Context, canonicalURL string, published
 // If the parent row already exists (re-poll race), the INSERT is a no-op and
 // the task rows are still attempted; that path is not expected in normal use
 // but is harmless because (canonical_url, platform, cadence) is the PK.
-func (s *Store) SaveTasks(ctx context.Context, canonicalURL string, publishedAt time.Time, refs []TaskRef) error {
+func (s *Store) SaveTasks(ctx context.Context, canonicalURL, blogID string, publishedAt time.Time, refs []TaskRef) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("save_tasks begin: %w", err)
@@ -81,10 +86,10 @@ func (s *Store) SaveTasks(ctx context.Context, canonicalURL string, publishedAt 
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO blog_posts_scheduled (canonical_url, published_at, scheduled_at)
-		 VALUES ($1, $2, now())
+		`INSERT INTO blog_posts_scheduled (canonical_url, blog_id, published_at, scheduled_at)
+		 VALUES ($1, $2, $3, now())
 		 ON CONFLICT (canonical_url) DO NOTHING`,
-		canonicalURL, publishedAt,
+		canonicalURL, blogID, publishedAt,
 	); err != nil {
 		return fmt.Errorf("save_tasks scheduled: %w", err)
 	}

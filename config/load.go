@@ -9,6 +9,80 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// validateBlogMarketing is a no-op when no feeds are configured. When any
+// feed is present, every feed's effective (root-merged) config is checked.
+func validateBlogMarketing(bm *BlogMarketing) error {
+	if len(bm.Feeds) == 0 {
+		// Allow root-level defaults to be set even without feeds, so a user
+		// can pre-stage config; nothing actually runs until feeds is non-empty.
+		return validateBlogMarketingDefaults(bm)
+	}
+	if err := validateBlogMarketingDefaults(bm); err != nil {
+		return err
+	}
+	seen := make(map[string]bool, len(bm.Feeds))
+	for i, f := range bm.Feeds {
+		if f.ID == "" {
+			return fmt.Errorf("blog_marketing.feeds[%d].id required", i)
+		}
+		if seen[f.ID] {
+			return fmt.Errorf("blog_marketing.feeds: duplicate id %q", f.ID)
+		}
+		seen[f.ID] = true
+		if f.FeedURL == "" {
+			return fmt.Errorf("blog_marketing.feeds[%s].feed_url required", f.ID)
+		}
+		if _, err := url.Parse(f.FeedURL); err != nil {
+			return fmt.Errorf("blog_marketing.feeds[%s].feed_url: %w", f.ID, err)
+		}
+		// Effective fields = override or root default. Empty after merge ⇒ invalid.
+		effProject := f.ProjectName
+		if effProject == "" {
+			effProject = bm.ProjectName
+		}
+		if effProject == "" {
+			return fmt.Errorf("blog_marketing.feeds[%s].project_name required (or set blog_marketing.project_name as default)", f.ID)
+		}
+		effPostTime := f.PostTime
+		if effPostTime == "" {
+			effPostTime = bm.PostTime
+		}
+		if effPostTime == "" {
+			return fmt.Errorf("blog_marketing.feeds[%s].post_time required (HH:MM, or set blog_marketing.post_time as default)", f.ID)
+		}
+		if _, err := time.Parse("15:04", effPostTime); err != nil {
+			return fmt.Errorf("blog_marketing.feeds[%s].post_time: expected HH:MM, got %q", f.ID, effPostTime)
+		}
+		effTZ := f.Timezone
+		if effTZ == "" {
+			effTZ = bm.Timezone
+		}
+		if effTZ != "" {
+			if _, err := time.LoadLocation(effTZ); err != nil {
+				return fmt.Errorf("blog_marketing.feeds[%s].timezone: %w", f.ID, err)
+			}
+		}
+	}
+	return nil
+}
+
+// validateBlogMarketingDefaults checks root-level defaults in isolation —
+// PostTime parse, Timezone load — without requiring presence (defaults are
+// allowed to be empty if every feed provides its own override).
+func validateBlogMarketingDefaults(bm *BlogMarketing) error {
+	if bm.PostTime != "" {
+		if _, err := time.Parse("15:04", bm.PostTime); err != nil {
+			return fmt.Errorf("blog_marketing.post_time: expected HH:MM, got %q", bm.PostTime)
+		}
+	}
+	if bm.Timezone != "" {
+		if _, err := time.LoadLocation(bm.Timezone); err != nil {
+			return fmt.Errorf("blog_marketing.timezone: %w", err)
+		}
+	}
+	return nil
+}
+
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -65,28 +139,8 @@ func validate(c *Config) error {
 		return fmt.Errorf("env var %s (postgres.url_env) is empty", c.Postgres.URLEnv)
 	}
 
-	bm := c.BlogMarketing
-	if bm.FeedURL != "" || bm.ProjectName != "" || bm.PostTime != "" || bm.Timezone != "" || bm.SyncInterval != 0 {
-		if bm.FeedURL == "" {
-			return fmt.Errorf("blog_marketing.feed_url required")
-		}
-		if _, err := url.Parse(bm.FeedURL); err != nil {
-			return fmt.Errorf("blog_marketing.feed_url: %w", err)
-		}
-		if bm.ProjectName == "" {
-			return fmt.Errorf("blog_marketing.project_name required")
-		}
-		if bm.PostTime == "" {
-			return fmt.Errorf("blog_marketing.post_time required (HH:MM)")
-		}
-		if _, err := time.Parse("15:04", bm.PostTime); err != nil {
-			return fmt.Errorf("blog_marketing.post_time: expected HH:MM, got %q", bm.PostTime)
-		}
-		if bm.Timezone != "" {
-			if _, err := time.LoadLocation(bm.Timezone); err != nil {
-				return fmt.Errorf("blog_marketing.timezone: %w", err)
-			}
-		}
+	if err := validateBlogMarketing(&c.BlogMarketing); err != nil {
+		return err
 	}
 
 	if c.ExecutionHistory.Enabled {

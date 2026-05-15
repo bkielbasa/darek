@@ -45,7 +45,7 @@ func TestDrafterOpenAI_HappyPath(t *testing.T) {
 		Title:       "Hello",
 		Summary:     "World",
 		PublishedAt: time.Now(),
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.Equal(t, "X-l", drafts[blogmarketing.PlatformX][blogmarketing.CadenceLaunch])
 	require.Equal(t, "M-r", drafts[blogmarketing.PlatformMastodon][blogmarketing.CadenceReshare2W])
@@ -56,7 +56,7 @@ func TestDrafterOpenAI_HappyPath(t *testing.T) {
 func TestDrafterOpenAI_ChatError(t *testing.T) {
 	chat := &fakeChat{respErr: errors.New("boom")}
 	d := blogmarketing.NewOpenAIDrafter(chat)
-	_, err := d.Draft(context.Background(), blogfeed.Entry{URL: "x", Title: "t"})
+	_, err := d.Draft(context.Background(), blogfeed.Entry{URL: "x", Title: "t"}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "boom")
 }
@@ -64,14 +64,40 @@ func TestDrafterOpenAI_ChatError(t *testing.T) {
 func TestDrafterOpenAI_BadJSON(t *testing.T) {
 	chat := &fakeChat{resp: "not json"}
 	d := blogmarketing.NewOpenAIDrafter(chat)
-	_, err := d.Draft(context.Background(), blogfeed.Entry{URL: "x", Title: "t"})
+	_, err := d.Draft(context.Background(), blogfeed.Entry{URL: "x", Title: "t"}, nil)
 	require.Error(t, err)
+}
+
+func TestDrafterOpenAI_AccountsAppearInUserMessage(t *testing.T) {
+	chat := &fakeChat{
+		resp: `{
+			"x":        {"launch":"X-l","reshare":"X-r","resurface":"X-rs"},
+			"mastodon": {"launch":"M-l","reshare":"M-r","resurface":"M-rs"},
+			"linkedin": {"launch":"L-l","reshare":"L-r","resurface":"L-rs"}
+		}`,
+	}
+	d := blogmarketing.NewOpenAIDrafter(chat)
+	_, err := d.Draft(context.Background(), blogfeed.Entry{URL: "u", Title: "t", Summary: "s"},
+		map[blogmarketing.Platform]string{
+			blogmarketing.PlatformX:        "@bk_tech",
+			blogmarketing.PlatformMastodon: "@bk@fosstodon.org",
+			// Intentionally no linkedin entry.
+		},
+	)
+	require.NoError(t, err)
+	// The user message is the second message (after system).
+	require.GreaterOrEqual(t, len(chat.gotMsgs), 2)
+	userPart, err := chat.gotMsgs[1].MarshalJSON()
+	require.NoError(t, err)
+	require.Contains(t, string(userPart), "@bk_tech")
+	require.Contains(t, string(userPart), "@bk@fosstodon.org")
+	require.NotContains(t, string(userPart), "\"linkedin\"", "missing platforms must be omitted, not blank-filled")
 }
 
 func TestDrafterOpenAI_MissingCell(t *testing.T) {
 	chat := &fakeChat{resp: `{"x":{"launch":"only"}, "mastodon":{}, "linkedin":{}}`}
 	d := blogmarketing.NewOpenAIDrafter(chat)
-	_, err := d.Draft(context.Background(), blogfeed.Entry{URL: "x", Title: "t"})
+	_, err := d.Draft(context.Background(), blogfeed.Entry{URL: "x", Title: "t"}, nil)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "missing")
 }

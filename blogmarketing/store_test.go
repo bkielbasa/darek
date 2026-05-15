@@ -20,7 +20,7 @@ func TestStore_RoundTrip(t *testing.T) {
 	store := blogmarketing.NewStore(db.Wrap(raw))
 
 	ctx := context.Background()
-	count, err := store.Count(ctx)
+	count, err := store.Count(ctx, "tech-blog")
 	require.NoError(t, err)
 	require.Equal(t, 0, count)
 
@@ -28,12 +28,18 @@ func TestStore_RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, scheduled)
 
-	// Seen-only path (first-run backfill).
-	require.NoError(t, store.MarkSeenOnly(ctx, "https://blog.example.com/old", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+	// Seen-only path (per-blog first-run backfill).
+	require.NoError(t, store.MarkSeenOnly(ctx, "https://blog.example.com/old", "tech-blog",
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
 
-	count, err = store.Count(ctx)
+	count, err = store.Count(ctx, "tech-blog")
 	require.NoError(t, err)
 	require.Equal(t, 1, count)
+
+	// Count is per-blog: a different blog still reads as first-run.
+	count, err = store.Count(ctx, "side-blog")
+	require.NoError(t, err)
+	require.Equal(t, 0, count, "Count must scope to blog_id so adding a new blog doesn't drag in old rows")
 
 	scheduled, err = store.IsScheduled(ctx, "https://blog.example.com/old")
 	require.NoError(t, err)
@@ -52,6 +58,7 @@ func TestStore_RoundTrip(t *testing.T) {
 	}
 	require.NoError(t, store.SaveTasks(ctx,
 		"https://blog.example.com/new",
+		"tech-blog",
 		time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC),
 		refs,
 	))
@@ -73,5 +80,5 @@ func TestStore_RoundTrip(t *testing.T) {
 	require.Equal(t, blogmarketing.CadenceLaunch, cad)
 
 	// Idempotency: re-marking is fine (PRIMARY KEY conflict swallowed via ON CONFLICT DO NOTHING).
-	require.NoError(t, store.MarkSeenOnly(ctx, "https://blog.example.com/old", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(ctx, "https://blog.example.com/old", "tech-blog", time.Now()))
 }

@@ -72,12 +72,29 @@ type FreshRSS struct {
 	SyncInterval time.Duration `yaml:"sync_interval"`
 }
 
+// BlogMarketing is multi-blog. Root-level fields are defaults that each
+// feed entry can override per blog. Adding a new feed entry to config later
+// triggers a per-blog backfill (no tasks for posts that pre-date the first
+// poll for that blog).
 type BlogMarketing struct {
-	FeedURL      string        `yaml:"feed_url"`
-	ProjectName  string        `yaml:"project_name"`
 	SyncInterval time.Duration `yaml:"sync_interval"`
-	PostTime     string        `yaml:"post_time"` // "HH:MM"
-	Timezone     string        `yaml:"timezone"`  // optional; default = system local
+	ProjectName  string        `yaml:"project_name"` // default for all feeds
+	PostTime     string        `yaml:"post_time"`    // default for all feeds, "HH:MM"
+	Timezone     string        `yaml:"timezone"`     // default for all feeds; optional
+	Feeds        []BlogFeed    `yaml:"feeds"`
+}
+
+// BlogFeed is one blog's worth of config. ID is the stable identifier persisted
+// in blog_posts_scheduled.blog_id. Accounts map platform name ("x", "mastodon",
+// "linkedin") to the user-visible handle the LLM is told to weave into copy.
+// ProjectName/PostTime/Timezone, if empty, fall back to the BlogMarketing root.
+type BlogFeed struct {
+	ID          string            `yaml:"id"`
+	FeedURL     string            `yaml:"feed_url"`
+	Accounts    map[string]string `yaml:"accounts"`
+	ProjectName string            `yaml:"project_name"` // optional override
+	PostTime    string            `yaml:"post_time"`    // optional override
+	Timezone    string            `yaml:"timezone"`     // optional override
 }
 
 type Server struct {

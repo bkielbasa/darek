@@ -21,6 +21,55 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
+// buildBlogFeedRuns translates config.BlogMarketing into a slice of
+// blogmarketing.FeedRun ready for SyncAll. Each feed inherits root-level
+// defaults (project_name / post_time / timezone) unless it sets its own.
+// Returns an error if a per-feed feed_url is unreachable to construct or a
+// timezone is bogus.
+func buildBlogFeedRuns(bm config.BlogMarketing) ([]blogmarketing.FeedRun, error) {
+	runs := make([]blogmarketing.FeedRun, 0, len(bm.Feeds))
+	for _, f := range bm.Feeds {
+		project := f.ProjectName
+		if project == "" {
+			project = bm.ProjectName
+		}
+		postTime := f.PostTime
+		if postTime == "" {
+			postTime = bm.PostTime
+		}
+		tz := f.Timezone
+		if tz == "" {
+			tz = bm.Timezone
+		}
+		feed, err := blogfeed.New(blogfeed.Options{URL: f.FeedURL})
+		if err != nil {
+			return nil, fmt.Errorf("blog %s: feed: %w", f.ID, err)
+		}
+		var loc *time.Location
+		if tz != "" {
+			loc, err = time.LoadLocation(tz)
+			if err != nil {
+				return nil, fmt.Errorf("blog %s: timezone: %w", f.ID, err)
+			}
+		}
+		accounts := make(map[blogmarketing.Platform]string, len(f.Accounts))
+		for k, v := range f.Accounts {
+			accounts[blogmarketing.Platform(k)] = v
+		}
+		runs = append(runs, blogmarketing.FeedRun{
+			Feed: feed,
+			Config: blogmarketing.Config{
+				BlogID:      f.ID,
+				ProjectName: project,
+				PostTime:    postTime,
+				Timezone:    loc,
+				Accounts:    accounts,
+			},
+		})
+	}
+	return runs, nil
+}
+
 func runBlog(ctx context.Context, cfgPath string, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: darek blog sync")
@@ -38,8 +87,8 @@ func runBlogSync(ctx context.Context, cfgPath string) (retErr error) {
 	if err != nil {
 		return err
 	}
-	if cfg.BlogMarketing.FeedURL == "" {
-		return fmt.Errorf("blog_marketing not configured in %s", cfgPath)
+	if len(cfg.BlogMarketing.Feeds) == 0 {
+		return fmt.Errorf("blog_marketing.feeds is empty in %s", cfgPath)
 	}
 	dsn, err := config.ResolveSecret("env:" + cfg.Postgres.URLEnv)
 	if err != nil {
@@ -94,33 +143,16 @@ func runBlogSync(ctx context.Context, cfgPath string) (retErr error) {
 		return fmt.Errorf("todoist client: %w", err)
 	}
 
-	feed, err := blogfeed.New(blogfeed.Options{URL: cfg.BlogMarketing.FeedURL})
+	runs, err := buildBlogFeedRuns(cfg.BlogMarketing)
 	if err != nil {
-		return fmt.Errorf("blogfeed client: %w", err)
+		return err
 	}
 	store := blogmarketing.NewStore(pool)
 	drafter := blogmarketing.NewOpenAIDrafter(llmClient)
 
-	bcfg := blogmarketing.Config{
-		FeedURL:      cfg.BlogMarketing.FeedURL,
-		ProjectName:  cfg.BlogMarketing.ProjectName,
-		PostTime:     cfg.BlogMarketing.PostTime,
-		SyncInterval: cfg.BlogMarketing.SyncInterval,
-	}
-	if cfg.BlogMarketing.Timezone != "" {
-		loc, err := time.LoadLocation(cfg.BlogMarketing.Timezone)
-		if err != nil {
-			return fmt.Errorf("timezone: %w", err)
-		}
-		bcfg.Timezone = loc
-	}
-
-	res, err := blogmarketing.Sync(ctx, feed, store, drafter, td, bcfg)
-	if err != nil {
-		return fmt.Errorf("sync: %w", err)
-	}
-	fmt.Printf("blog sync: scheduled=%d backfill_seen=%d skipped=%d errors=%d\n",
-		res.Scheduled, res.BackfillSeen, res.Skipped, len(res.Errors))
+	res := blogmarketing.SyncAll(ctx, store, drafter, td, runs)
+	fmt.Printf("blog sync: feeds=%d scheduled=%d backfill_seen=%d skipped=%d errors=%d\n",
+		len(runs), res.Scheduled, res.BackfillSeen, res.Skipped, len(res.Errors))
 	for _, e := range res.Errors {
 		fmt.Fprintf(os.Stderr, "  err: %v\n", e)
 	}

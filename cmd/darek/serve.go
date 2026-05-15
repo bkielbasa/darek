@@ -20,7 +20,6 @@ import (
 	"darek/llm"
 	"darek/obs"
 	"darek/todoistimport"
-	"darek/tools/blogfeed"
 	"darek/tools/freshrss"
 	"darek/tools/todoist"
 	"darek/tools/whatsapp"
@@ -145,7 +144,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 	}
 
 	var blogSync serve.SyncFn
-	if cfg.BlogMarketing.FeedURL != "" {
+	if len(cfg.BlogMarketing.Feeds) > 0 {
 		apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
 		if err != nil {
 			return fmt.Errorf("blog_marketing openai key: %w", err)
@@ -162,32 +161,16 @@ func runServe(ctx context.Context, cfgPath string) error {
 		if err != nil {
 			return fmt.Errorf("blog_marketing todoist: %w", err)
 		}
-		feed, err := blogfeed.New(blogfeed.Options{URL: cfg.BlogMarketing.FeedURL})
+		runs, err := buildBlogFeedRuns(cfg.BlogMarketing)
 		if err != nil {
-			return fmt.Errorf("blog_marketing feed: %w", err)
+			return err
 		}
 		bmStore := blogmarketing.NewStore(pool)
 		drafter := blogmarketing.NewOpenAIDrafter(llmClient)
-		bcfg := blogmarketing.Config{
-			FeedURL:      cfg.BlogMarketing.FeedURL,
-			ProjectName:  cfg.BlogMarketing.ProjectName,
-			PostTime:     cfg.BlogMarketing.PostTime,
-			SyncInterval: cfg.BlogMarketing.SyncInterval,
-		}
-		if cfg.BlogMarketing.Timezone != "" {
-			loc, err := time.LoadLocation(cfg.BlogMarketing.Timezone)
-			if err != nil {
-				return fmt.Errorf("blog_marketing timezone: %w", err)
-			}
-			bcfg.Timezone = loc
-		}
 		blogSync = func(ctx context.Context) (string, error) {
-			res, err := blogmarketing.Sync(ctx, feed, bmStore, drafter, td, bcfg)
-			if err != nil {
-				return "", err
-			}
-			return fmt.Sprintf("scheduled=%d backfill_seen=%d skipped=%d errors=%d",
-				res.Scheduled, res.BackfillSeen, res.Skipped, len(res.Errors)), nil
+			res := blogmarketing.SyncAll(ctx, bmStore, drafter, td, runs)
+			return fmt.Sprintf("feeds=%d scheduled=%d backfill_seen=%d skipped=%d errors=%d",
+				len(runs), res.Scheduled, res.BackfillSeen, res.Skipped, len(res.Errors)), nil
 		}
 	}
 

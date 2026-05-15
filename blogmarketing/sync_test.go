@@ -32,7 +32,7 @@ type fakeDrafter struct {
 	err  error
 }
 
-func (f *fakeDrafter) Draft(ctx context.Context, e blogfeed.Entry) (blogmarketing.Drafts, error) {
+func (f *fakeDrafter) Draft(ctx context.Context, e blogfeed.Entry, _ map[blogmarketing.Platform]string) (blogmarketing.Drafts, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -110,7 +110,7 @@ func setup(t *testing.T) *blogmarketing.Store {
 
 func cfg(t *testing.T) blogmarketing.Config {
 	return blogmarketing.Config{
-		FeedURL:     "https://blog.example.com/feed.xml",
+		BlogID:      "tech-blog",
 		ProjectName: "Marketing",
 		PostTime:    "09:00",
 		Timezone:    warsaw(t),
@@ -142,7 +142,7 @@ func TestSync_FirstRun_MarksSeenOnly_NoTasks(t *testing.T) {
 func TestSync_NewPost_Schedules9Tasks(t *testing.T) {
 	store := setup(t)
 	// Pre-seed table so we are NOT in first-run mode.
-	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", "tech-blog", time.Now()))
 
 	pubAt := time.Now().Add(-30 * time.Minute)
 	feed := &fakeFeed{entries: []blogfeed.Entry{
@@ -173,7 +173,7 @@ func TestSync_NewPost_Schedules9Tasks(t *testing.T) {
 
 func TestSync_TodoistMidFailure_RollsBack(t *testing.T) {
 	store := setup(t)
-	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", "tech-blog", time.Now()))
 
 	feed := &fakeFeed{entries: []blogfeed.Entry{
 		{URL: "https://example.com/x", CanonicalURL: "https://example.com/x", Title: "X", PublishedAt: time.Now()},
@@ -195,7 +195,7 @@ func TestSync_TodoistMidFailure_RollsBack(t *testing.T) {
 
 func TestSync_DrafterFailure_NoTasks_NoState(t *testing.T) {
 	store := setup(t)
-	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", "tech-blog", time.Now()))
 
 	feed := &fakeFeed{entries: []blogfeed.Entry{
 		{URL: "https://example.com/x", CanonicalURL: "https://example.com/x", Title: "X", PublishedAt: time.Now()},
@@ -221,9 +221,64 @@ func TestSync_FeedFailure_HardError(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestSync_FirstRunIsPerBlog(t *testing.T) {
+	store := setup(t)
+
+	// Seed an unrelated blog so the table is non-empty globally.
+	require.NoError(t, store.MarkSeenOnly(context.Background(),
+		"https://other.example.com/old", "side-blog", time.Now()))
+
+	// tech-blog still has zero rows → must be treated as first-run for it,
+	// even though the table itself is non-empty.
+	feed := &fakeFeed{entries: []blogfeed.Entry{
+		{URL: "https://example.com/a", CanonicalURL: "https://example.com/a", Title: "A", PublishedAt: time.Now()},
+	}}
+	td := &fakeTodoist{projectID: "P", failOnIndex: -1}
+
+	res, err := blogmarketing.Sync(context.Background(), feed, store, &fakeDrafter{}, td, cfg(t))
+	require.NoError(t, err)
+	require.Equal(t, 1, res.BackfillSeen, "tech-blog must backfill its first poll even though side-blog has rows")
+	require.Empty(t, td.created, "first run must not create Todoist tasks")
+}
+
+func TestSyncAll_OneBlogFailureDoesNotStopOthers(t *testing.T) {
+	store := setup(t)
+	// Pre-seed both blogs so neither hits first-run backfill.
+	require.NoError(t, store.MarkSeenOnly(context.Background(),
+		"https://example.com/seed-a", "blog-a", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(),
+		"https://example.com/seed-b", "blog-b", time.Now()))
+
+	td := &fakeTodoist{projectID: "P", failOnIndex: -1}
+
+	feedA := &fakeFeed{err: errors.New("dns fail")}
+	feedB := &fakeFeed{entries: []blogfeed.Entry{
+		{URL: "https://example.com/post-b", CanonicalURL: "https://example.com/post-b",
+			Title: "Post B", PublishedAt: time.Now()},
+	}}
+
+	runs := []blogmarketing.FeedRun{
+		{Feed: feedA, Config: blogmarketing.Config{BlogID: "blog-a", ProjectName: "Marketing", PostTime: "09:00", Timezone: warsaw(t)}},
+		{Feed: feedB, Config: blogmarketing.Config{BlogID: "blog-b", ProjectName: "Marketing", PostTime: "09:00", Timezone: warsaw(t)}},
+	}
+	agg := blogmarketing.SyncAll(context.Background(), store, &fakeDrafter{}, td, runs)
+
+	require.Equal(t, 1, agg.Scheduled, "blog-b must still schedule despite blog-a failing")
+	require.NotEmpty(t, agg.Errors, "blog-a's feed error must be recorded")
+	// Ensure blog-a's error is tagged with its blog id.
+	found := false
+	for _, err := range agg.Errors {
+		if err != nil && (err.Error() == "blog blog-a: feed list: dns fail" || (len(err.Error()) > 0 && err.Error()[:13] == "blog blog-a: ")) {
+			found = true
+			break
+		}
+	}
+	require.True(t, found, "blog-a error must be tagged with its blog id")
+}
+
 func TestSync_LaunchDateIsMaxOfPubAndNow(t *testing.T) {
 	store := setup(t)
-	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", time.Now()))
+	require.NoError(t, store.MarkSeenOnly(context.Background(), "https://example.com/seed", "tech-blog", time.Now()))
 
 	loc := warsaw(t)
 	old := time.Now().In(loc).Add(-72 * time.Hour) // 3 days ago

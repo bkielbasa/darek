@@ -199,24 +199,37 @@ For cron-driven sync without the server:
 
 ## Blog → Marketing Todoist
 
-When the user publishes a new post on their blog, `darek` schedules a 9-task social-promotion campaign in the Todoist `Marketing` project: one task per platform (X, Mastodon, LinkedIn) at three cadences (publication day, +14 days, +90 days). Each task contains an LLM-drafted, ready-to-send post tailored to its platform and cadence.
+When the user publishes a new post on a configured blog, `darek` schedules a 9-task social-promotion campaign in Todoist: one task per platform (X, Mastodon, LinkedIn) at three cadences (publication day, +14 days, +90 days). Each task contains an LLM-drafted, ready-to-send post tailored to its platform and cadence. Multiple blogs are supported, each mapped to its own social accounts so the drafter can weave handles into the copy verbatim.
 
 ### Configure
 
 ```yaml
 blog_marketing:
-  feed_url: https://blog.example.com/feed.xml
-  project_name: Marketing
-  sync_interval: 15m       # 0 disables the in-server loop
-  post_time: "09:00"       # local time-of-day for every task
-  timezone: Europe/Warsaw  # optional; default = system local
+  sync_interval: 15m         # 0 disables the in-server loop
+  project_name: Marketing    # default for every feed
+  post_time: "09:00"         # default; per-feed override possible
+  timezone: Europe/Warsaw    # default; per-feed override possible
+  feeds:
+    - id: tech-blog
+      feed_url: https://blog.example.com/feed.xml
+      accounts:
+        x: "@bk_tech"
+        mastodon: "@bk@fosstodon.org"
+        linkedin: "bartlomiej-klimczak"
+    - id: side-blog
+      feed_url: https://other.example.com/feed.xml
+      accounts:
+        x: "@bk_side"
+        mastodon: "@bk_side@mastodon.social"
+        linkedin: "bartlomiej-klimczak"
+      project_name: Marketing-Side  # opt-in per-blog override
 ```
 
-The Todoist project name is resolved at runtime against the Todoist projects API. Six labels are auto-created on first scheduled post: `x`, `mastodon`, `linkedin`, `launch`, `reshare-2w`, `resurface-3mo`.
+The Todoist project name is resolved at runtime against the Todoist projects API. Six labels are auto-created on first scheduled post: `x`, `mastodon`, `linkedin`, `launch`, `reshare-2w`, `resurface-3mo`. The drafter prompt receives each blog's `accounts` map and weaves the handles into copy where natural.
 
 ### First-run safety
 
-The very first poll inserts every existing feed entry into a local state table with no Todoist tasks created. Only posts that appear after the first poll spawn the 9-task series. Clearing the `blog_posts_scheduled` table re-triggers the same backfill on the next run.
+First-run mode is detected per blog (`blog_id` column). The very first poll for a given blog inserts every existing feed entry into the local state table with no Todoist tasks created — so adding a new blog to the config later does NOT spawn campaigns for its back-catalog. Only posts that appear after that blog's first poll spawn the 9-task series. Clearing rows for one `blog_id` in `blog_posts_scheduled` re-triggers backfill for that blog only.
 
 ### Run
 
