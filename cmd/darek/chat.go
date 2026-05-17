@@ -112,7 +112,12 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 		for _, c := range cfg.Calendars {
 			switch c.Kind {
 			case "ical":
-				if err := srcs.Add(ical.New(c.Nickname, c.URL)); err != nil {
+				url, err := c.ICalURL()
+				if err != nil {
+					logger.WarnContext(ctx, "skipping ical calendar", "nickname", c.Nickname, "error", err.Error())
+					continue
+				}
+				if err := srcs.Add(ical.New(c.Nickname, url)); err != nil {
 					return fmt.Errorf("calendar %s: %w", c.Nickname, err)
 				}
 			case "google":

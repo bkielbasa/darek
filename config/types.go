@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Config struct {
 	OpenAI    OpenAI        `yaml:"openai"`
@@ -140,10 +143,27 @@ type WhatsApp struct {
 type CalendarSrc struct {
 	Kind            string `yaml:"kind"` // "google" | "ical"
 	Nickname        string `yaml:"nickname"`
-	URL             string `yaml:"url"`               // for ical
+	URL             string `yaml:"url"`               // for ical (literal URL; mutually exclusive with url_env)
+	URLEnv          string `yaml:"url_env"`           // for ical (env var holding URL; mutually exclusive with url)
 	CalendarID      string `yaml:"calendar_id"`       // for google, default "primary"
 	ClientIDEnv     string `yaml:"client_id_env"`     // for google
 	ClientSecretEnv string `yaml:"client_secret_env"` // for google
+}
+
+// ICalURL returns the iCal source URL for this calendar entry. Prefers the
+// literal URL if set; otherwise resolves URLEnv. Errors if both are set or
+// if neither is set.
+func (c CalendarSrc) ICalURL() (string, error) {
+	switch {
+	case c.URL != "" && c.URLEnv != "":
+		return "", fmt.Errorf("calendar %q: set only one of url or url_env", c.Nickname)
+	case c.URL != "":
+		return c.URL, nil
+	case c.URLEnv != "":
+		return ResolveSecret("env:" + c.URLEnv)
+	default:
+		return "", fmt.Errorf("calendar %q: url or url_env is required for kind ical", c.Nickname)
+	}
 }
 
 type Mail struct {

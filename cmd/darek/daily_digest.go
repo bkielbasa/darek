@@ -73,7 +73,11 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 	for _, c := range cfg.Calendars {
 		switch c.Kind {
 		case "ical":
-			if err := srcs.Add(ical.New(c.Nickname, c.URL)); err != nil {
+			url, err := c.ICalURL()
+			if err != nil {
+				return err
+			}
+			if err := srcs.Add(ical.New(c.Nickname, url)); err != nil {
 				return fmt.Errorf("calendar %s: %w", c.Nickname, err)
 			}
 		case "google":
