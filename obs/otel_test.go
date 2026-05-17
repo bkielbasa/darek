@@ -54,5 +54,7 @@ func TestInit_ExposesPrometheusRegistry(t *testing.T) {
 	require.NoError(t, err)
 	_ = mfs // empty is acceptable; we only assert the call doesn't error.
 
+	// Shutdown may report export errors against the unreachable endpoint;
+	// only verify no hang.
 	_ = shutdown(ctx)
 }
