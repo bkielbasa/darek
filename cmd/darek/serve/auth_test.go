@@ -98,7 +98,7 @@ func newAuthedServer(t *testing.T) *Server {
 }
 
 func TestIsPublicPath(t *testing.T) {
-	for _, p := range []string{"/healthz", "/login", "/logout", "/auth/callback", "/static/style.css", "/static/img/x.png"} {
+	for _, p := range []string{"/healthz", "/metrics", "/login", "/logout", "/auth/callback", "/static/style.css", "/static/img/x.png"} {
 		require.True(t, isPublicPath(p), p)
 	}
 	for _, p := range []string{"/", "/all", "/sync", "/links/abc/rating"} {
