@@ -31,3 +31,28 @@ func TestInit_FailsFastOnUnreachableEndpoint(t *testing.T) {
 	// when the endpoint is unreachable, so we only verify no hang).
 	_ = shutdown(ctx)
 }
+
+func TestInit_ExposesPrometheusRegistry(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := l.Addr().String()
+	require.NoError(t, l.Close())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	setup, shutdown, err := Init(ctx, Options{
+		ServiceName: "darek-test",
+		Endpoint:    addr,
+		Insecure:    true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, setup)
+	require.NotNil(t, setup.PrometheusRegistry)
+
+	// Gather must work even before any instrument records data.
+	mfs, err := setup.PrometheusRegistry.Gather()
+	require.NoError(t, err)
+	_ = mfs // empty is acceptable; we only assert the call doesn't error.
+
+	_ = shutdown(ctx)
+}

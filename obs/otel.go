@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -17,9 +19,10 @@ import (
 )
 
 type Setup struct {
-	TracerProvider *sdktrace.TracerProvider
-	MeterProvider  *sdkmetric.MeterProvider
-	LoggerProvider *sdklog.LoggerProvider
+	TracerProvider     *sdktrace.TracerProvider
+	MeterProvider      *sdkmetric.MeterProvider
+	LoggerProvider     *sdklog.LoggerProvider
+	PrometheusRegistry *prometheus.Registry
 }
 
 type Options struct {
@@ -58,12 +61,19 @@ func Init(ctx context.Context, opt Options) (*Setup, func(context.Context) error
 		return nil, nil, fmt.Errorf("log exporter: %w", err)
 	}
 
+	promRegistry := prometheus.NewRegistry()
+	promReader, err := otelprom.New(otelprom.WithRegisterer(promRegistry))
+	if err != nil {
+		return nil, nil, fmt.Errorf("prometheus exporter: %w", err)
+	}
+
 	tp := sdktrace.NewTracerProvider(
 		sdktrace.WithBatcher(traceExp),
 		sdktrace.WithResource(res),
 	)
 	mp := sdkmetric.NewMeterProvider(
 		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExp)),
+		sdkmetric.WithReader(promReader),
 		sdkmetric.WithResource(res),
 	)
 	lp := sdklog.NewLoggerProvider(
@@ -93,5 +103,10 @@ func Init(ctx context.Context, opt Options) (*Setup, func(context.Context) error
 		}
 		return nil
 	}
-	return &Setup{TracerProvider: tp, MeterProvider: mp, LoggerProvider: lp}, shutdown, nil
+	return &Setup{
+		TracerProvider:     tp,
+		MeterProvider:      mp,
+		LoggerProvider:     lp,
+		PrometheusRegistry: promRegistry,
+	}, shutdown, nil
 }
