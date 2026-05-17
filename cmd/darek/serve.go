@@ -233,7 +233,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 		return fmt.Errorf("oidc init: %w", err)
 	}
 
-	srv, err := serve.New(store, sync, analyzer, authCfg, oidcClient, waManager, execStore, cfg.OTEL.JaegerUIURL)
+	srv, err := serve.New(store, sync, analyzer, authCfg, oidcClient, waManager, execStore, cfg.OTEL.JaegerUIURL, otelSetup.PrometheusRegistry)
 	if err != nil {
 		return err
 	}
