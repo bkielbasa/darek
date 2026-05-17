@@ -13,6 +13,8 @@ import (
 	"darek/links"
 	"darek/tools/whatsapp"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -53,11 +55,13 @@ type Server struct {
 	pageSets  map[string]*template.Template
 	partials  *template.Template
 	loginTmpl *template.Template
+
+	promRegistry *prometheus.Registry
 }
 
 // New constructs a Server. If sync is nil, the /sync route returns 501.
 // If analyzer is nil, /links/{id}/analyze returns 501 and the UI hides the button.
-func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, oidc *OIDC, wa WhatsAppManager, exec *exechistory.Store, jaegerURL string) (*Server, error) {
+func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, oidc *OIDC, wa WhatsAppManager, exec *exechistory.Store, jaegerURL string, promRegistry *prometheus.Registry) (*Server, error) {
 	if oidc == nil {
 		return nil, fmt.Errorf("serve.New: oidc client is required")
 	}
@@ -66,18 +70,19 @@ func New(store *links.Store, sync SyncFn, analyzer Analyzer, auth AuthConfig, oi
 		return nil, err
 	}
 	s := &Server{
-		store:      store,
-		mux:        http.NewServeMux(),
-		sync:       sync,
-		analyze:    analyzer,
-		auth:       auth,
-		oidc:       oidc,
-		whatsApp:   wa,
-		executions: exec,
-		jaegerURL:  jaegerURL,
-		pageSets:   b.pageSets,
-		partials:   b.partials,
-		loginTmpl:  b.loginTmpl,
+		store:        store,
+		mux:          http.NewServeMux(),
+		sync:         sync,
+		analyze:      analyzer,
+		auth:         auth,
+		oidc:         oidc,
+		whatsApp:     wa,
+		executions:   exec,
+		jaegerURL:    jaegerURL,
+		pageSets:     b.pageSets,
+		partials:     b.partials,
+		loginTmpl:    b.loginTmpl,
+		promRegistry: promRegistry,
 	}
 	s.enabledNavItems = filterNavItems(navItems, s)
 	s.version = buildVersion()
@@ -96,6 +101,10 @@ func (s *Server) routes() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	if s.promRegistry != nil {
+		s.mux.Handle("GET /metrics", promhttp.HandlerFor(s.promRegistry, promhttp.HandlerOpts{}))
+	}
 
 	staticFS, _ := fs.Sub(StaticFS, "static")
 	s.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticFS))))
