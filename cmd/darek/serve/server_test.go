@@ -74,7 +74,11 @@ func TestServer_Metrics_PublicAndExposes(t *testing.T) {
 	if rec.Code != 200 {
 		t.Fatalf("status %d, want 200 (auth must be bypassed)", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "darek_metrics_test_total") {
-		t.Errorf("body missing expected metric line: %q", rec.Body.String())
+	body := rec.Body.String()
+	if !strings.Contains(body, "darek_metrics_test_total") {
+		t.Errorf("body missing expected metric line: %q", body)
+	}
+	if !strings.Contains(body, "# HELP darek_metrics_test_total") {
+		t.Errorf("body missing HELP line for metric: %q", body)
 	}
 }

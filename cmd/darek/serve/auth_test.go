@@ -117,7 +117,7 @@ func TestSanitizeNext(t *testing.T) {
 
 func TestRequireAuth_BypassesPublic(t *testing.T) {
 	s := newAuthedServer(t)
-	for _, p := range []string{"/healthz", "/login"} {
+	for _, p := range []string{"/healthz", "/metrics", "/login"} {
 		req := httptest.NewRequest("GET", p, nil)
 		w := httptest.NewRecorder()
 		s.Handler().ServeHTTP(w, req)
