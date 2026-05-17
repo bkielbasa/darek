@@ -95,7 +95,8 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 }
 
 func isPublicPath(p string) bool {
-	return p == "/healthz" || p == "/login" || p == "/logout" || p == "/auth/callback" ||
+	return p == "/healthz" || p == "/metrics" ||
+		p == "/login" || p == "/logout" || p == "/auth/callback" ||
 		strings.HasPrefix(p, "/static/")
 }
 
