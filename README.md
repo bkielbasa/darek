@@ -171,7 +171,7 @@ Run it ad-hoc, or hook it up to cron / launchd:
 
 The email renders as a card per day (rounded corners, calendar-name pills colored by hash, "Today" badge on the first card) with a plaintext fallback. Each event line shows time, calendar, summary, and optional location. Empty days print "Nothing scheduled" rather than being hidden, so a silent miss is debuggable.
 
-When WhatsApp is configured (see the WhatsApp section below) and at least one group is opted in, this email also includes a per-group summary of recent WhatsApp activity below the calendar.
+When WhatsApp is configured (see the WhatsApp section below) and at least one group is opted in, this email also includes a per-group summary of recent WhatsApp activity below the calendar. When `memory.enabled: true`, a "Follow-ups" / "People" section appears between the calendar and WhatsApp sections (see Cross-digest memory below).
 
 Exits non-zero with a clear stderr message if `to` or `from_account` is missing or `from_account` doesn't match a configured `mail.accounts[].nickname`.
 
@@ -369,6 +369,17 @@ Text messages go in verbatim. Media (images, voice, video, documents, stickers) 
 When the daily-digest cron runs (`darek calendar daily-digest`) and at least one WhatsApp group is opted-in, the email gains a "WhatsApp" section after the calendar one. Each section lists one short LLM-generated summary per group, covering messages received since the previous digest. Only groups with new messages appear; if no group has activity since the last run, the WhatsApp section is omitted. The lookback is capped at 7 days — if `darek serve` was offline longer than that, older messages are not summarized.
 
 The chat-side `whatsapp.summarize_group` agent tool and the `whatsapp.send` tool are separate plans; they would build on the same `Summarizer` and `Store`.
+
+### Cross-digest memory
+
+When `memory.enabled: true` (and WhatsApp + OpenAI are configured), the daily digest also extracts durable memories from recent WhatsApp conversation:
+
+- **agreements** / **events** — plans the group made, with an optional date
+- **person_fact** — durable facts about people in the chat
+
+Memories are stored in the `memories` table and deduplicated by a stable key, so re-mentioning a plan updates it rather than creating a duplicate. The email gains a **Follow-ups** section (active agreements/events due soon, overdue, or recently mentioned, ordered before the WhatsApp section) and a **People** section (facts seen in the last few days). Nothing is changed automatically — Darek never edits your calendar from these.
+
+Recalled from chat via the `memory.list` agent tool (alongside the free-form `memory.save` / `memory.recall` notes tools). Extraction looks back at most 7 days and runs independently of the WhatsApp *summary* cursor, so a failure in one never suppresses the other.
 
 ## Roadmap
 
