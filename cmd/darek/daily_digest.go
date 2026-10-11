@@ -11,6 +11,7 @@ import (
 	"darek/config"
 	"darek/db"
 	"darek/llm"
+	"darek/memory"
 	"darek/tools/calendar"
 	"darek/tools/calendar/digest"
 	googlecal "darek/tools/calendar/google"
@@ -109,9 +110,14 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 	text := digest.RenderText(buckets)
 	html := digest.RenderHTML(buckets, now)
 
+	logf := func(format string, a ...any) {
+		fmt.Fprintf(os.Stderr, "warn: "+format, a...)
+	}
+
 	// Build the WhatsApp summary section, if WA is enabled and OpenAI is
 	// configured. Failures here are logged + skipped — they must never
 	// prevent the calendar digest from going out.
+	var waText, waHTML string
 	var summarizedIDs []string
 	if cfg.WhatsApp.Enabled {
 		apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
@@ -130,24 +136,64 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 			} else {
 				waStore := whatsapp.NewStore(pool)
 				summarizer := whatsapp.NewSummarizer(llmClient)
-				logf := func(format string, a ...any) {
-					fmt.Fprintf(os.Stderr, "warn: "+format, a...)
-				}
 				sections, ids, err := whatsapp.BuildSummary(ctx, waStore, summarizer, logf)
 				switch {
 				case err != nil:
 					fmt.Fprintf(os.Stderr, "warn: whatsapp summary failed: %v\n", err)
 				case len(sections) > 0:
-					if waText := whatsapp.RenderText(sections); waText != "" {
-						text += "\n\n" + waText
-					}
-					if waHTML := whatsapp.RenderHTML(sections); waHTML != "" {
-						html += waHTML
-					}
+					waText = whatsapp.RenderText(sections)
+					waHTML = whatsapp.RenderHTML(sections)
 					summarizedIDs = ids
 				}
 			}
 		}
+	}
+
+	// Build the cross-digest memory section (follow-ups + people) when enabled.
+	// Extraction persists independently of email success; failures are logged
+	// and skipped so they never prevent the calendar digest from going out.
+	var memText, memHTML string
+	if cfg.Memory.Enabled && cfg.WhatsApp.Enabled && pool != nil {
+		apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
+		switch {
+		case err != nil || apiKey == "":
+			fmt.Fprintf(os.Stderr, "info: openai not configured, skipping memory digest section\n")
+		default:
+			llmClient, err := llm.New(llm.Options{
+				APIKey:  apiKey,
+				BaseURL: cfg.OpenAI.BaseURL,
+				Model:   cfg.OpenAI.Model,
+				Timeout: cfg.Agent.LLMTimeout,
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warn: llm client for memory digest: %v\n", err)
+			} else {
+				waStore := whatsapp.NewStore(pool)
+				memStore := memory.NewStore(pool)
+				stats, err := memory.BuildMemories(ctx, waStore, memStore, memory.NewExtractor(llmClient), logf)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "warn: memory extraction failed: %v\n", err)
+				}
+				view, rerr := memory.Recall(ctx, memStore)
+				if rerr != nil {
+					fmt.Fprintf(os.Stderr, "warn: memory recall failed: %v\n", rerr)
+				}
+				memText = memory.RenderText(view)
+				memHTML = memory.RenderHTML(view)
+				fmt.Fprintf(os.Stderr, "info: memory: groups=%d extracted=%d saved=%d failed=%d\n",
+					stats.Groups, stats.Extracted, stats.Saved, stats.FailedGroups)
+			}
+		}
+	}
+
+	// Section order: calendar → follow-ups/people → whatsapp.
+	if memText != "" {
+		text += "\n\n" + memText
+		html += memHTML
+	}
+	if waText != "" {
+		text += "\n\n" + waText
+		html += waHTML
 	}
 
 	subject := d.Subject
