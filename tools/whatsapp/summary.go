@@ -234,8 +234,11 @@ func BuildSummary(
 
 		summary, err := summarizer.Summarize(ctx, g.Name, msgs)
 		if err != nil {
-			logger("whatsapp summary skipped for %q: %v\n", g.Name, err)
-			continue
+			logger("whatsapp summary failed for %q: %v\n", g.Name, err)
+			// Don't drop the group from the email: fall back to the raw
+			// recent messages so the digest is never silently emptied by a
+			// summarization failure.
+			summary = fallbackSummary(g.Name, msgs)
 		}
 
 		sections = append(sections, Section{
@@ -251,4 +254,24 @@ func BuildSummary(
 	}
 
 	return sections, ids, nil
+}
+
+// fallbackSummary renders the most recent (up to fallbackMaxMessages)
+// messages verbatim, used when the LLM summarization fails or returns empty.
+func fallbackSummary(_ string, msgs []Message) string {
+	const fallbackMaxMessages = 10
+	start := len(msgs) - fallbackMaxMessages
+	if start < 0 {
+		start = 0
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Summary unavailable — showing the most recent messages:\n")
+	for _, m := range msgs[start:] {
+		name := m.SenderName
+		if name == "" {
+			name = m.SenderJID
+		}
+		fmt.Fprintf(&b, "— %s: %s\n", name, m.Body)
+	}
+	return strings.TrimSpace(b.String())
 }

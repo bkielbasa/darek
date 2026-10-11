@@ -101,7 +101,7 @@ func TestBuildSummary_SkipsGroupWithNoUnsummarized(t *testing.T) {
 	require.Equal(t, "Active", sections[0].GroupName)
 }
 
-func TestBuildSummary_FailedGroupExcludedFromIDs(t *testing.T) {
+func TestBuildSummary_FailedGroupFallsBackToRawMessages(t *testing.T) {
 	s, ctx := newSummaryTestStore(t)
 
 	require.NoError(t, s.UpsertGroup(ctx, "g1@g.us", "Good"))
@@ -118,9 +118,18 @@ func TestBuildSummary_FailedGroupExcludedFromIDs(t *testing.T) {
 	}
 	sections, ids, err := BuildSummary(ctx, s, stub, nil)
 	require.NoError(t, err, "one bad group must not abort the run")
-	require.Len(t, sections, 1)
-	require.Equal(t, "Good", sections[0].GroupName)
-	require.Equal(t, []string{"g1m"}, ids, "Bad group's message IDs are not in the mark-summarized list")
+	require.Len(t, sections, 2, "the failed group falls back to raw messages instead of being dropped")
+
+	byName := map[string]Section{}
+	for _, sec := range sections {
+		byName[sec.GroupName] = sec
+	}
+	require.Contains(t, byName, "Good")
+	require.NotEmpty(t, byName["Good"].Summary)
+	bad := byName["Bad"]
+	require.Contains(t, bad.Summary, "y", "fallback includes the raw message body")
+	require.Contains(t, bad.Summary, "Summary unavailable")
+	require.ElementsMatch(t, []string{"g1m", "g2m"}, ids, "messages shown in the fallback are marked summarized")
 }
 
 func TestBuildSummary_NoGroupsReturnsEmpty(t *testing.T) {

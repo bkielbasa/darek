@@ -40,6 +40,10 @@ type Manager struct {
 
 	pair pairing
 
+	// drop is signaled whenever the connection drops or the device is logged
+	// out, so Run can react by re-pairing or reconnecting.
+	drop chan struct{}
+
 	mu        sync.Mutex
 	client    *whatsmeow.Client
 	container *sqlstore.Container
@@ -76,64 +80,106 @@ func NewManager(opts Options) (*Manager, error) {
 		store:     NewStore(opts.Pool),
 		storePath: opts.StorePath,
 		logger:    opts.Logger,
+		drop:      make(chan struct{}, 1),
 		container: container,
 	}, nil
 }
 
-// Run blocks until ctx is canceled. It connects to whatsmeow, registers the
-// event handler, and orchestrates the QR pairing flow on first run.
+// Run blocks until ctx is canceled. It owns the connection lifecycle: while
+// unpaired (fresh install, explicit logout, or an external logout that deletes
+// the stored device) it drives the QR pairing flow and keeps rotating a fresh
+// QR on failures; once paired it stays connected and reconnects after drops.
 func (m *Manager) Run(ctx context.Context) error {
-	device, err := m.container.GetFirstDevice(ctx)
-	if err != nil {
-		return fmt.Errorf("get device: %w", err)
-	}
-
-	m.mu.Lock()
-	m.client = whatsmeow.NewClient(device, m.logger)
-	m.client.AddEventHandler(m.handleEvent)
-	m.mu.Unlock()
-
-	// Already paired: connect and stream events.
-	if m.client.Store.ID != nil {
-		m.pair.setPaired(deviceName(m.client), phoneE164(m.client))
-		if err := m.client.Connect(); err != nil {
-			return fmt.Errorf("connect: %w", err)
+	for {
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
-		<-ctx.Done()
-		m.client.Disconnect()
-		return ctx.Err()
-	}
 
-	// Not paired: drive the QR pairing flow.
-	qrChan, err := m.client.GetQRChannel(ctx)
+		device, err := m.container.GetFirstDevice(ctx)
+		if err != nil {
+			return fmt.Errorf("get device: %w", err)
+		}
+
+		m.mu.Lock()
+		// Rebuild the client whenever the device is gone (logged out) or not
+		// yet paired. GetQRChannel needs a fresh, unconnected client each
+		// attempt and the previous client's QR emitter disconnects it.
+		if m.client == nil || m.client.Store.Deleted || m.client.Store.ID == nil {
+			if m.client != nil {
+				m.client.Disconnect()
+			}
+			m.client = whatsmeow.NewClient(device, m.logger)
+			m.client.EnableAutoReconnect = false
+			m.client.AddEventHandler(m.handleEvent)
+		}
+		cli := m.client
+		m.mu.Unlock()
+
+		// Not paired: drive the QR pairing flow until it succeeds.
+		if cli.Store.ID == nil {
+			if err := m.runPairing(ctx, cli); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				// Let the QR rotate rather than hot-looping on failures.
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(3 * time.Second):
+				}
+			}
+			continue
+		}
+
+		m.pair.setPaired(deviceName(cli), phoneE164(cli))
+		if !cli.IsConnected() {
+			if err := cli.Connect(); err != nil {
+				if ctx.Err() != nil {
+					return ctx.Err()
+				}
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-time.After(5 * time.Second):
+				}
+				continue
+			}
+		}
+
+		// Connected: stream events until a drop (reconnect) or cancellation.
+		select {
+		case <-m.drop:
+		case <-ctx.Done():
+			cli.Disconnect()
+			return ctx.Err()
+		}
+	}
+}
+
+// pair drives the QR channel on an unpaired client. It returns nil once a
+// phone has scanned the QR and the session is stored, and an error if pairing
+// timed out or the client is outdated (caller retries with a fresh QR).
+func (m *Manager) runPairing(ctx context.Context, cli *whatsmeow.Client) error {
+	m.pair.reset()
+	qrChan, err := cli.GetQRChannel(ctx)
 	if err != nil {
 		return fmt.Errorf("qr channel: %w", err)
 	}
-	if err := m.client.Connect(); err != nil {
+	if err := cli.Connect(); err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
-
 	for evt := range qrChan {
 		switch evt.Event {
 		case "code":
 			m.pair.setQR(evt.Code)
 		case "success":
-			m.pair.setPaired(deviceName(m.client), phoneE164(m.client))
+			m.pair.setPaired(deviceName(cli), phoneE164(cli))
+			return nil
 		case "timeout", "err-client-outdated", "err-scanned-without-multidevice":
-			m.client.Disconnect()
 			return fmt.Errorf("pairing failed: %s", evt.Event)
 		}
-		select {
-		case <-ctx.Done():
-			m.client.Disconnect()
-			return ctx.Err()
-		default:
-		}
 	}
-
-	<-ctx.Done()
-	m.client.Disconnect()
-	return ctx.Err()
+	return errors.New("pairing qr channel closed")
 }
 
 // Close is safe to call after Run returns.
@@ -209,8 +255,12 @@ func (m *Manager) handleEvent(evt any) {
 	switch e := evt.(type) {
 	case *events.Connected:
 		m.pair.setConnected(true)
-	case *events.Disconnected, *events.LoggedOut:
+	case *events.Disconnected, *events.StreamReplaced:
 		m.pair.setConnected(false)
+		m.signalDrop()
+	case *events.LoggedOut:
+		m.pair.reset()
+		m.signalDrop()
 	case *events.Message:
 		if e.Info.Chat.Server != types.GroupServer {
 			return
@@ -218,6 +268,14 @@ func (m *Manager) handleEvent(evt any) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		m.ingestMessage(ctx, e)
+	}
+}
+
+// signalDrop wakes Run after a drop or logout, coalescing notifications.
+func (m *Manager) signalDrop() {
+	select {
+	case m.drop <- struct{}{}:
+	default:
 	}
 }
 
