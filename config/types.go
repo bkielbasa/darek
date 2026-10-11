@@ -138,6 +138,13 @@ type Auth struct {
 type WhatsApp struct {
 	Enabled   bool   `yaml:"enabled"`
 	StorePath string `yaml:"store_path"` // sqlite path for whatsmeow session; defaults to ~/.darek/whatsapp/store.db
+
+	// PostgresURLEnv, when set, selects a Postgres-backed whatsmeow session
+	// store instead of SQLite. The value is the name of the environment
+	// variable holding a pgx-compatible DSN (e.g. DAREK_POSTGRES_URL).
+	// Prefer Postgres when the SQLite store would live on a network
+	// filesystem, where SQLite locking is unreliable.
+	PostgresURLEnv string `yaml:"postgres_url_env"`
 }
 
 type CalendarSrc struct {

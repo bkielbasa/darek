@@ -12,6 +12,10 @@ import (
 	"darek/db"
 	"darek/obs"
 
+	// Registers the "pgx" database/sql driver, used when the whatsmeow
+	// session store is backed by Postgres instead of SQLite.
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	"go.mau.fi/whatsmeow/types"
@@ -22,12 +26,15 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Options configures NewManager. StorePath is the SQLite session file (created
-// if missing). Pool is the existing darek wrapped Postgres pool. Logger may be nil.
+// Options configures NewManager. Exactly one session store is chosen: if
+// PostgresDSN is set the whatsmeow session is stored in Postgres; otherwise
+// StorePath is used for a SQLite session file (created if missing). Pool is
+// the existing darek wrapped Postgres pool. Logger may be nil.
 type Options struct {
-	StorePath string
-	Pool      *db.Pool
-	Logger    waLog.Logger
+	StorePath   string
+	PostgresDSN string
+	Pool        *db.Pool
+	Logger      waLog.Logger
 }
 
 // Manager owns the WhatsApp connection lifecycle. Methods are safe for
@@ -36,6 +43,7 @@ type Manager struct {
 	pool      *db.Pool
 	store     *Store
 	storePath string
+	postgres  bool
 	logger    waLog.Logger
 
 	pair pairing
@@ -49,36 +57,48 @@ type Manager struct {
 	container *sqlstore.Container
 }
 
-// NewManager loads (or creates) the SQLite session store. It does not connect
-// — call Run to start the connection loop.
+// NewManager loads (or creates) the whatsmeow session store. It does not
+// connect — call Run to start the connection loop.
 func NewManager(opts Options) (*Manager, error) {
 	if opts.Pool == nil {
 		return nil, errors.New("whatsapp.NewManager: Pool is required")
-	}
-	if opts.StorePath == "" {
-		opts.StorePath = filepath.Join(os.Getenv("HOME"), ".darek", "whatsapp", "store.db")
-	}
-	if err := os.MkdirAll(filepath.Dir(opts.StorePath), 0o700); err != nil {
-		return nil, fmt.Errorf("whatsapp store dir: %w", err)
 	}
 	if opts.Logger == nil {
 		opts.Logger = waLog.Stdout("whatsmeow", "INFO", true)
 	}
 
 	dbLog := waLog.Stdout("wadb", "WARN", true)
-	// modernc.org/sqlite uses ?_pragma=foreign_keys(on) syntax (not the
-	// mattn/go-sqlite3 ?_foreign_keys=on shorthand). Whatsmeow's sqlstore
-	// fails to start if foreign_keys is off — its migrations rely on cascades.
-	container, err := sqlstore.New(context.Background(), "sqlite3",
-		fmt.Sprintf("file:%s?_pragma=foreign_keys(on)", opts.StorePath), dbLog)
-	if err != nil {
-		return nil, fmt.Errorf("sqlstore: %w", err)
+
+	var container *sqlstore.Container
+	if opts.PostgresDSN != "" {
+		var err error
+		container, err = sqlstore.New(context.Background(), "pgx", opts.PostgresDSN, dbLog)
+		if err != nil {
+			return nil, fmt.Errorf("sqlstore (postgres): %w", err)
+		}
+	} else {
+		if opts.StorePath == "" {
+			opts.StorePath = filepath.Join(os.Getenv("HOME"), ".darek", "whatsapp", "store.db")
+		}
+		if err := os.MkdirAll(filepath.Dir(opts.StorePath), 0o700); err != nil {
+			return nil, fmt.Errorf("whatsapp store dir: %w", err)
+		}
+		// modernc.org/sqlite uses ?_pragma=foreign_keys(on) syntax (not the
+		// mattn/go-sqlite3 ?_foreign_keys=on shorthand). Whatsmeow's sqlstore
+		// fails to start if foreign_keys is off — its migrations rely on cascades.
+		var err error
+		container, err = sqlstore.New(context.Background(), "sqlite3",
+			fmt.Sprintf("file:%s?_pragma=foreign_keys(on)", opts.StorePath), dbLog)
+		if err != nil {
+			return nil, fmt.Errorf("sqlstore (sqlite): %w", err)
+		}
 	}
 
 	return &Manager{
 		pool:      opts.Pool,
 		store:     NewStore(opts.Pool),
 		storePath: opts.StorePath,
+		postgres:  opts.PostgresDSN != "",
 		logger:    opts.Logger,
 		drop:      make(chan struct{}, 1),
 		container: container,
@@ -233,8 +253,9 @@ func (m *Manager) SetIngestEnabled(ctx context.Context, jid string, on bool) err
 	return m.store.SetIngestEnabled(ctx, jid, on)
 }
 
-// Unpair logs out, disconnects, and deletes the SQLite store. Postgres data
-// (whatsapp_messages, whatsapp_groups) is preserved.
+// Unpair logs out, disconnects, and deletes the stored session (the SQLite
+// file, or the device row in Postgres). Postgres data (whatsapp_messages,
+// whatsapp_groups) is preserved.
 func (m *Manager) Unpair(ctx context.Context) error {
 	m.mu.Lock()
 	cli := m.client
@@ -244,6 +265,24 @@ func (m *Manager) Unpair(ctx context.Context) error {
 		cli.Disconnect()
 	}
 	m.pair.reset()
+
+	if m.postgres {
+		// Logout already deletes the device on success; if it failed (e.g.
+		// offline) delete the stored device directly so the next Run starts a
+		// fresh pairing. GetFirstDevice returns an unsaved device (ID nil)
+		// when nothing is stored, so the guard skips the no-op case.
+		device, err := m.container.GetFirstDevice(ctx)
+		if err != nil {
+			return fmt.Errorf("get device: %w", err)
+		}
+		if device != nil && device.ID != nil {
+			if err := device.Delete(ctx); err != nil {
+				return fmt.Errorf("delete device: %w", err)
+			}
+		}
+		return nil
+	}
+
 	if err := os.Remove(m.storePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove store: %w", err)
 	}

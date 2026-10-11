@@ -73,11 +73,18 @@ func runServe(ctx context.Context, cfgPath string) error {
 
 	var waManager *whatsapp.Manager
 	if cfg.WhatsApp.Enabled {
+		waOpts := whatsapp.Options{Pool: pool}
+		if env := cfg.WhatsApp.PostgresURLEnv; env != "" {
+			dsn := os.Getenv(env)
+			if dsn == "" {
+				return fmt.Errorf("whatsapp: %s is set but empty", env)
+			}
+			waOpts.PostgresDSN = dsn
+		} else {
+			waOpts.StorePath = cfg.WhatsApp.StorePath
+		}
 		var err error
-		waManager, err = whatsapp.NewManager(whatsapp.Options{
-			StorePath: cfg.WhatsApp.StorePath,
-			Pool:      pool,
-		})
+		waManager, err = whatsapp.NewManager(waOpts)
 		if err != nil {
 			return fmt.Errorf("whatsapp manager: %w", err)
 		}
