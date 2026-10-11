@@ -182,3 +182,40 @@ func (s *Store) MarkSummarized(ctx context.Context, ids []string) error {
 		ids)
 	return err
 }
+
+// UnextractedMessages returns messages where memories_extracted_at IS NULL and
+// sent_at >= now() - lookbackDays. Ascending by sent_at.
+func (s *Store) UnextractedMessages(ctx context.Context, groupJID string, lookbackDays int) ([]Message, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, group_jid, sender_jid, sender_name, kind, body, sent_at
+		  FROM whatsapp_messages
+		 WHERE group_jid = $1
+		   AND memories_extracted_at IS NULL
+		   AND sent_at >= now() - make_interval(days => $2)
+		 ORDER BY sent_at
+	`, groupJID, lookbackDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.GroupJID, &m.SenderJID, &m.SenderName, &m.Kind, &m.Body, &m.SentAt); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// MarkMemoriesExtracted sets memories_extracted_at = now() for the given IDs.
+// Idempotent; does not touch summarized_at.
+func (s *Store) MarkMemoriesExtracted(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := s.pool.Exec(ctx,
+		`UPDATE whatsapp_messages SET memories_extracted_at = now() WHERE id = ANY($1)`, ids)
+	return err
+}

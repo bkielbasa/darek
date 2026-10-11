@@ -35,6 +35,8 @@ type Metrics struct {
 	// Memory
 	MemoryNotesSaved    metric.Int64Counter
 	MemoryNotesRecalled metric.Int64Counter
+	MemoriesExtracted   metric.Int64Counter
+	MemoriesSaved       metric.Int64Counter
 
 	// Links
 	LinksEvents metric.Int64Counter
@@ -111,6 +113,8 @@ func MetricsInstance() (*Metrics, error) {
 			MailSent:                  i64(m.Int64Counter("darek.mail.sent")),
 			MemoryNotesSaved:          i64(m.Int64Counter("darek.memory.notes_saved")),
 			MemoryNotesRecalled:       i64(m.Int64Counter("darek.memory.notes_recalled")),
+			MemoriesExtracted:         i64(m.Int64Counter("darek.memory.memories_extracted")),
+			MemoriesSaved:             i64(m.Int64Counter("darek.memory.memories_saved")),
 			LinksEvents:               i64(m.Int64Counter("darek.links.events")),
 			LinksIngest:               i64(m.Int64Counter("darek.links.ingest")),
 			FreshRSSSyncDuration:      f64hist(m.Float64Histogram("darek.freshrss.sync_duration", metric.WithUnit("s"))),

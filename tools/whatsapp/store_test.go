@@ -185,3 +185,43 @@ func TestStore_MarkSummarized_EmptyIsNoop(t *testing.T) {
 	require.NoError(t, s.MarkSummarized(ctx, nil))
 	require.NoError(t, s.MarkSummarized(ctx, []string{}))
 }
+
+func TestStore_UnextractedMessages(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	require.NoError(t, s.UpsertGroup(ctx, "g1@g.us", "G1"))
+	old := time.Now().UTC().Add(-30 * 24 * time.Hour).Truncate(time.Second)
+	rec := time.Now().UTC().Add(-time.Hour).Truncate(time.Second)
+	require.NoError(t, s.InsertMessage(ctx, Message{ID: "old", GroupJID: "g1@g.us", SenderJID: "x", SenderName: "x", Kind: "text", Body: "long ago", SentAt: old}))
+	require.NoError(t, s.InsertMessage(ctx, Message{ID: "rec", GroupJID: "g1@g.us", SenderJID: "x", SenderName: "x", Kind: "text", Body: "recent", SentAt: rec}))
+
+	msgs, err := s.UnextractedMessages(ctx, "g1@g.us", 7)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1, "old message outside 7-day window excluded")
+	require.Equal(t, "rec", msgs[0].ID)
+
+	require.NoError(t, s.MarkMemoriesExtracted(ctx, []string{"rec"}))
+	msgs, err = s.UnextractedMessages(ctx, "g1@g.us", 7)
+	require.NoError(t, err)
+	require.Empty(t, msgs)
+}
+
+func TestStore_MarkMemoriesExtracted_DoesNotTouchSummarized(t *testing.T) {
+	s, ctx := newTestStore(t)
+
+	require.NoError(t, s.UpsertGroup(ctx, "g1@g.us", "G1"))
+	now := time.Now().UTC().Truncate(time.Second)
+	require.NoError(t, s.InsertMessage(ctx, Message{ID: "m1", GroupJID: "g1@g.us", SenderJID: "x", SenderName: "x", Kind: "text", Body: "a", SentAt: now}))
+
+	require.NoError(t, s.MarkMemoriesExtracted(ctx, []string{"m1", "missing"})) // idempotent, ignores missing
+
+	// The summary cursor is untouched: m1 is still unsummarized.
+	unsum, err := s.UnsummarizedMessages(ctx, "g1@g.us", 7)
+	require.NoError(t, err)
+	require.Len(t, unsum, 1)
+}
+
+func TestStore_MarkMemoriesExtracted_EmptyIsNoop(t *testing.T) {
+	s, ctx := newTestStore(t)
+	require.NoError(t, s.MarkMemoriesExtracted(ctx, nil))
+}

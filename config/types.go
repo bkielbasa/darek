@@ -57,6 +57,7 @@ type Agent struct {
 type Memory struct {
 	Pgvector       bool   `yaml:"pgvector"`
 	EmbeddingModel string `yaml:"embedding_model"`
+	Enabled        bool   `yaml:"enabled"` // enables digest memory extraction + recall
 }
 
 type Links struct {
