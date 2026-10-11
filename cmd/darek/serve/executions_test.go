@@ -32,7 +32,7 @@ func newTestServerWithExecutions(t *testing.T) (*Server, *db.Pool) {
 	if err != nil {
 		t.Fatalf("auth: %v", err)
 	}
-	srv, err := New(nil, nil, nil, authCfg, &OIDC{}, nil, store, "")
+	srv, err := New(nil, nil, nil, authCfg, &OIDC{}, nil, store, "", nil)
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestHandleExecutionsList_DisabledRendersFriendlyMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv, err := New(nil, nil, nil, authCfg, &OIDC{}, nil, nil, "")
+	srv, err := New(nil, nil, nil, authCfg, &OIDC{}, nil, nil, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
