@@ -138,6 +138,34 @@ func (s *Store) RatedExamples(ctx context.Context, minRating, maxRating, limit i
 	return out, rows.Err()
 }
 
+// LikedTitles returns the titles of highly-rated links (rating >= 4) regardless
+// of whether they have an embedding, used by the full-text fallback.
+func (s *Store) LikedTitles(ctx context.Context, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT coalesce(title,'')
+		  FROM links
+		 WHERE rating >= 4
+		   AND coalesce(title,'') <> ''
+		 ORDER BY created_at DESC
+		 LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
 // VectorCandidates retrieves unrated, embedded links closest to liked (and
 // farthest from disliked) per kind, interleaving articles and videos.
 func (s *Store) VectorCandidates(ctx context.Context, liked, disliked []float32, lookbackDays, cooldownDays, perKind int) ([]Candidate, error) {
@@ -230,9 +258,9 @@ func (s *Store) textKind(ctx context.Context, kind, query string, lookbackDays, 
 
 	q := fmt.Sprintf(`
 		SELECT id, url, coalesce(title,''), kind, coalesce(feed,''), coalesce(summary,''),
-		       ts_rank(search, plainto_tsquery('simple', $1)) AS score
+		       ts_rank(search, to_tsquery('simple', $1)) AS score
 		  FROM links
-		 WHERE search @@ plainto_tsquery('simple', $1)
+		 WHERE search @@ to_tsquery('simple', $1)
 		   AND kind = $%d
 		   AND rating IS NULL%s
 		 ORDER BY score DESC
