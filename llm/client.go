@@ -113,3 +113,60 @@ func (cl *Client) Chat(ctx context.Context, params openai.ChatCompletionNewParam
 }
 
 func (cl *Client) Model() string { return cl.model }
+
+// Embed returns one embedding vector per input, in the same order. model is an
+// embedding model (e.g. text-embedding-3-small) and is independent of the chat
+// model configured on the client.
+func (cl *Client) Embed(ctx context.Context, model string, inputs []string) ([][]float64, error) {
+	if model == "" {
+		return nil, errors.New("embedding model required")
+	}
+	if len(inputs) == 0 {
+		return nil, errors.New("no inputs to embed")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, cl.timeout)
+	defer cancel()
+
+	start := time.Now()
+	var resp *openai.CreateEmbeddingResponse
+	depErr := obs.Dep(ctx, "openai_embed", "embed", func(ctx context.Context) error {
+		var err error
+		resp, err = cl.c.Embeddings.New(ctx, openai.EmbeddingNewParams{
+			Model: model,
+			Input: openai.EmbeddingNewParamsInputUnion{OfArrayOfStrings: inputs},
+		})
+		return err
+	})
+	dur := time.Since(start).Seconds()
+
+	outcome := "ok"
+	if depErr != nil {
+		outcome = "error"
+	}
+	cl.m.LLMLatency.Record(ctx, dur,
+		metric.WithAttributes(attribute.String("model", model), attribute.String("outcome", outcome)),
+	)
+	if depErr != nil {
+		return nil, fmt.Errorf("openai embed: %w", depErr)
+	}
+
+	tokenAttr := metric.WithAttributes(attribute.String("model", model))
+	cl.m.TokensInput.Add(ctx, resp.Usage.PromptTokens, tokenAttr)
+
+	out := make([][]float64, len(inputs))
+	for _, e := range resp.Data {
+		i := int(e.Index)
+		if i < 0 || i >= len(out) {
+			return nil, fmt.Errorf("embed: index %d out of range", e.Index)
+		}
+		out[i] = e.Embedding
+	}
+	for i, v := range out {
+		if v == nil {
+			return nil, fmt.Errorf("embed: missing vector for input %d", i)
+		}
+	}
+	return out, nil
+}
+

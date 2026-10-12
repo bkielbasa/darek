@@ -137,3 +137,45 @@ func TestChat_EmitsLLMSpanAttributes(t *testing.T) {
 	}
 	require.True(t, found, "expected an openai_chat.chat span")
 }
+
+func TestEmbed_HappyPath(t *testing.T) {
+	server := llmstub.New(t, llmstub.Reply{
+		Body: map[string]interface{}{
+			"object": "list",
+			"model":  "text-embedding-3-small",
+			"data": []map[string]interface{}{
+				{"object": "embedding", "index": 0, "embedding": []float64{0.1, 0.2, 0.3}},
+				{"object": "embedding", "index": 1, "embedding": []float64{0.4, 0.5, 0.6}},
+			},
+			"usage": map[string]interface{}{"prompt_tokens": 4, "total_tokens": 4},
+		},
+	})
+	cl, err := New(Options{APIKey: "test", BaseURL: server.URL, Model: "gpt-4.1"})
+	require.NoError(t, err)
+
+	vecs, err := cl.Embed(context.Background(), "text-embedding-3-small", []string{"a", "b"})
+	require.NoError(t, err)
+	require.Len(t, vecs, 2)
+	require.Equal(t, []float64{0.1, 0.2, 0.3}, vecs[0])
+	require.Equal(t, []float64{0.4, 0.5, 0.6}, vecs[1])
+}
+
+func TestEmbed_PropagatesError(t *testing.T) {
+	server := llmstub.New(t, llmstub.Reply{
+		StatusCode: 500,
+		Body:       map[string]interface{}{"error": map[string]interface{}{"message": "boom"}},
+	})
+	cl, err := New(Options{APIKey: "test", BaseURL: server.URL, Model: "gpt-4.1"})
+	require.NoError(t, err)
+	_, err = cl.Embed(context.Background(), "text-embedding-3-small", []string{"a"})
+	require.Error(t, err)
+}
+
+func TestEmbed_RequiresModelAndInputs(t *testing.T) {
+	cl, err := New(Options{APIKey: "test", Model: "gpt-4.1"})
+	require.NoError(t, err)
+	_, err = cl.Embed(context.Background(), "", []string{"a"})
+	require.Error(t, err)
+	_, err = cl.Embed(context.Background(), "text-embedding-3-small", nil)
+	require.Error(t, err)
+}
