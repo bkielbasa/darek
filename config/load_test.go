@@ -297,3 +297,31 @@ auth:
 	require.Equal(t, "darek", cfg.Auth.ClientID)
 	require.Equal(t, "darek-users", cfg.Auth.RequiredGroup)
 }
+
+func TestAnalyzeDefaults(t *testing.T) {
+	t.Setenv("OAI", "x")
+	t.Setenv("PG", "postgres://x")
+	path := writeTempConfig(t, `
+openai: {model: m, api_key_env: OAI}
+postgres: {url_env: PG}
+analyze: {enabled: true}
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	require.True(t, cfg.Analyze.Enabled)
+	require.Equal(t, []string{"article", "video"}, cfg.Analyze.Kinds)
+	require.Equal(t, 200, cfg.Analyze.TagVocabLimit)
+}
+
+func TestAnalyzeDisabledByDefault(t *testing.T) {
+	t.Setenv("OAI", "x")
+	t.Setenv("PG", "postgres://x")
+	path := writeTempConfig(t, `
+openai: {model: m, api_key_env: OAI}
+postgres: {url_env: PG}
+`)
+	cfg, err := Load(path)
+	require.NoError(t, err)
+	require.False(t, cfg.Analyze.Enabled)
+	require.Empty(t, cfg.Analyze.Kinds)
+}

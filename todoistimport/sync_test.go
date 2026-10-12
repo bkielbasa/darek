@@ -105,7 +105,7 @@ func TestSync_NoURLTaskIsSkipped(t *testing.T) {
 	require.Empty(t, fk.completed)
 }
 
-func TestSync_OnVideoIngested_NewVideo(t *testing.T) {
+func TestSync_OnIngested_NewLinks(t *testing.T) {
 	_, raw := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), raw))
 	store := links.NewStore(db.Wrap(raw))
@@ -119,29 +119,34 @@ func TestSync_OnVideoIngested_NewVideo(t *testing.T) {
 
 	type call struct {
 		linkID uuid.UUID
+		kind   string
 		url    string
-		title  string
 	}
 	var (
 		mu    sync.Mutex
 		calls []call
 	)
-	onVideo := func(ctx context.Context, id uuid.UUID, url, title string) error {
+	onIngested := func(ctx context.Context, id uuid.UUID, kind, url, title, body string) error {
 		mu.Lock()
 		defer mu.Unlock()
-		calls = append(calls, call{id, url, title})
+		calls = append(calls, call{id, kind, url})
 		return nil
 	}
 
-	res, err := todoistimport.Sync(context.Background(), fk, store, onVideo)
+	res, err := todoistimport.Sync(context.Background(), fk, store, onIngested)
 	require.NoError(t, err)
 	require.Equal(t, 2, res.Imported)
-	require.Len(t, calls, 1, "callback fires exactly once for the video")
-	require.Equal(t, "https://www.youtube.com/watch?v=abcDEF12345", calls[0].url)
-	require.NotEqual(t, uuid.Nil, calls[0].linkID)
+	require.Len(t, calls, 2, "callback fires for every new link")
+	byKind := map[string]string{}
+	for _, c := range calls {
+		require.NotEqual(t, uuid.Nil, c.linkID)
+		byKind[c.kind] = c.url
+	}
+	require.Equal(t, "https://www.youtube.com/watch?v=abcDEF12345", byKind["video"])
+	require.Equal(t, "https://example.com/article", byKind["article"])
 }
 
-func TestSync_OnVideoIngested_NotForExistingVideo(t *testing.T) {
+func TestSync_OnIngested_NotForExistingLink(t *testing.T) {
 	_, raw := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), raw))
 	store := links.NewStore(db.Wrap(raw))
@@ -154,15 +159,16 @@ func TestSync_OnVideoIngested_NotForExistingVideo(t *testing.T) {
 
 	fk := &fakeTodoist{tasks: []todoist.Task{{ID: "1", Content: url}}}
 	called := 0
-	_, err = todoistimport.Sync(context.Background(), fk, store, func(ctx context.Context, id uuid.UUID, url, title string) error {
+	onIngested := func(ctx context.Context, id uuid.UUID, kind, url, title, body string) error {
 		called++
 		return nil
-	})
+	}
+	_, err = todoistimport.Sync(context.Background(), fk, store, onIngested)
 	require.NoError(t, err)
 	require.Equal(t, 0, called)
 }
 
-func TestSync_OnVideoIngested_NilCallbackOK(t *testing.T) {
+func TestSync_OnIngested_NilCallbackOK(t *testing.T) {
 	_, raw := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), raw))
 	store := links.NewStore(db.Wrap(raw))

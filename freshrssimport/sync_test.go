@@ -61,7 +61,7 @@ func TestSync_ImportsAndMarksRead(t *testing.T) {
 	require.Len(t, got, 2)
 }
 
-func TestSync_OnVideoIngested_NewVideo(t *testing.T) {
+func TestSync_OnIngested_NewLinks(t *testing.T) {
 	_, raw := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), raw))
 	store := links.NewStore(db.Wrap(raw))
@@ -69,36 +69,43 @@ func TestSync_OnVideoIngested_NewVideo(t *testing.T) {
 	fr := &fakeFreshRSS{
 		articles: []freshrss.Article{
 			{ID: "1", URL: "https://www.youtube.com/watch?v=abcDEF12345", Title: "vid", Feed: "f"},
-			{ID: "2", URL: "https://example.com/an-article", Title: "art", Feed: "f"},
+			{ID: "2", URL: "https://example.com/an-article", Title: "art", Feed: "f", Summary: "a body"},
 		},
 	}
 
 	type call struct {
 		linkID uuid.UUID
+		kind   string
 		url    string
 		title  string
+		body   string
 	}
 	var (
 		mu    sync.Mutex
 		calls []call
 	)
-	onVideo := func(ctx context.Context, id uuid.UUID, url, title string) error {
+	onIngested := func(ctx context.Context, id uuid.UUID, kind, url, title, body string) error {
 		mu.Lock()
 		defer mu.Unlock()
-		calls = append(calls, call{id, url, title})
+		calls = append(calls, call{id, kind, url, title, body})
 		return nil
 	}
 
-	res, err := freshrssimport.Sync(context.Background(), fr, store, onVideo)
+	res, err := freshrssimport.Sync(context.Background(), fr, store, onIngested)
 	require.NoError(t, err)
 	require.Equal(t, 2, res.Imported)
-	require.Len(t, calls, 1, "callback fires exactly once for the video")
-	require.Equal(t, "https://www.youtube.com/watch?v=abcDEF12345", calls[0].url)
-	require.Equal(t, "vid", calls[0].title)
-	require.NotEqual(t, uuid.Nil, calls[0].linkID)
+	require.Len(t, calls, 2, "callback fires for every new link")
+
+	byKind := map[string]string{}
+	for _, c := range calls {
+		require.NotEqual(t, uuid.Nil, c.linkID)
+		byKind[c.kind] = c.url
+	}
+	require.Equal(t, "https://www.youtube.com/watch?v=abcDEF12345", byKind["video"])
+	require.Equal(t, "https://example.com/an-article", byKind["article"])
 }
 
-func TestSync_OnVideoIngested_NotForExistingVideo(t *testing.T) {
+func TestSync_OnIngested_NotForExistingLink(t *testing.T) {
 	_, raw := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), raw))
 	store := links.NewStore(db.Wrap(raw))
@@ -113,16 +120,16 @@ func TestSync_OnVideoIngested_NotForExistingVideo(t *testing.T) {
 		articles: []freshrss.Article{{ID: "1", URL: url, Title: "vid", Feed: "f"}},
 	}
 	called := 0
-	onVideo := func(ctx context.Context, id uuid.UUID, url, title string) error {
+	onIngested := func(ctx context.Context, id uuid.UUID, kind, url, title, body string) error {
 		called++
 		return nil
 	}
-	_, err = freshrssimport.Sync(context.Background(), fr, store, onVideo)
+	_, err = freshrssimport.Sync(context.Background(), fr, store, onIngested)
 	require.NoError(t, err)
 	require.Equal(t, 0, called, "callback must not fire for existing rows")
 }
 
-func TestSync_OnVideoIngested_CallbackErrorContinues(t *testing.T) {
+func TestSync_OnIngested_CallbackErrorContinues(t *testing.T) {
 	_, raw := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), raw))
 	store := links.NewStore(db.Wrap(raw))
@@ -134,16 +141,16 @@ func TestSync_OnVideoIngested_CallbackErrorContinues(t *testing.T) {
 		},
 	}
 
-	onVideo := func(ctx context.Context, id uuid.UUID, url, title string) error {
+	onIngested := func(ctx context.Context, id uuid.UUID, kind, url, title, body string) error {
 		return errors.New("boom")
 	}
-	res, err := freshrssimport.Sync(context.Background(), fr, store, onVideo)
+	res, err := freshrssimport.Sync(context.Background(), fr, store, onIngested)
 	require.NoError(t, err)
 	require.Equal(t, 2, res.Imported, "both videos still imported")
 	require.GreaterOrEqual(t, len(res.Errors), 2, "both callback errors collected")
 }
 
-func TestSync_OnVideoIngested_NilCallbackOK(t *testing.T) {
+func TestSync_OnIngested_NilCallbackOK(t *testing.T) {
 	_, raw := pg.Start(t)
 	require.NoError(t, db.Migrate(context.Background(), raw))
 	store := links.NewStore(db.Wrap(raw))

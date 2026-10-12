@@ -12,6 +12,7 @@ type Config struct {
 	Agent     Agent         `yaml:"agent"`
 	Memory    Memory        `yaml:"memory"`
 	Links     Links         `yaml:"links"`
+	Analyze   Analyze       `yaml:"analyze"`
 	Todoist   Todoist       `yaml:"todoist"`
 	FreshRSS  FreshRSS      `yaml:"freshrss"`
 	Calendars []CalendarSrc `yaml:"calendars"`
@@ -62,6 +63,13 @@ type Memory struct {
 
 type Links struct {
 	Pgvector bool `yaml:"pgvector"`
+}
+
+// Analyze configures automatic summary+tag generation for newly-ingested links.
+type Analyze struct {
+	Enabled       bool     `yaml:"enabled"`
+	Kinds         []string `yaml:"kinds"`           // default: article, video
+	TagVocabLimit int      `yaml:"tag_vocab_limit"` // existing tags fed to the analyzer; default 200
 }
 
 type Todoist struct {

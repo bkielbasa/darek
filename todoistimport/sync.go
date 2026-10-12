@@ -41,10 +41,10 @@ type Result struct {
 	Errors    []error
 }
 
-// OnVideoIngestedFunc is called once per newly-ingested video link
-// (kind=="video", isNew=true). Errors are appended to Result.Errors but do
+// OnIngestedFunc is called once per newly-ingested link (isNew=true), for any
+// kind, with the source body text. Errors are appended to Result.Errors but do
 // not abort sync.
-type OnVideoIngestedFunc func(ctx context.Context, linkID uuid.UUID, url, title string) error
+type OnIngestedFunc func(ctx context.Context, linkID uuid.UUID, kind, url, title, body string) error
 
 var urlRE = regexp.MustCompile(`https?://[^\s<>"']+`)
 
@@ -79,7 +79,7 @@ func normalizeLabels(in []string) []string {
 // Sync pulls #Inbox tasks, ingests URL-bearing ones via links.IngestOne,
 // merges Todoist labels into the link's tags, and completes the task.
 // Tasks without URLs are left alone (not completed).
-func Sync(ctx context.Context, c Lister, store *links.Store, onVideoIngested OnVideoIngestedFunc) (*Result, error) {
+func Sync(ctx context.Context, c Lister, store *links.Store, onIngested OnIngestedFunc) (*Result, error) {
 	ctx, span := tracer.Start(ctx, "todoistimport.sync")
 	exechistory.MarkExecution(span, "todoist-sync")
 	defer span.End()
@@ -103,7 +103,7 @@ func Sync(ctx context.Context, c Lister, store *links.Store, onVideoIngested OnV
 	g.SetLimit(concurrency)
 	for i, t := range tasks {
 		g.Go(func() error {
-			outcomes[i] = processTask(gctx, c, store, t, onVideoIngested)
+			outcomes[i] = processTask(gctx, c, store, t, onIngested)
 			return nil // never abort siblings — per-item errors are collected
 		})
 	}
@@ -150,7 +150,7 @@ type taskOutcome struct {
 // processTask runs the ingest/label/complete pipeline for a single task and
 // returns its outcome. Pure function over (ctx, c, store, t); safe to call
 // concurrently for distinct tasks.
-func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Task, onVideoIngested OnVideoIngestedFunc) taskOutcome {
+func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Task, onIngested OnIngestedFunc) taskOutcome {
 	rawURL := extractURL(t.Content, t.Description)
 	if rawURL == "" {
 		return taskOutcome{Skipped: true}
@@ -187,8 +187,8 @@ func processTask(ctx context.Context, c Lister, store *links.Store, t todoist.Ta
 		o.Completed = true
 	}
 
-	if isNew && kind == "video" && onVideoIngested != nil {
-		if cbErr := onVideoIngested(ctx, id, rawURL, title); cbErr != nil {
+	if isNew && onIngested != nil {
+		if cbErr := onIngested(ctx, id, kind, rawURL, title, links.StripHTML(t.Description)); cbErr != nil {
 			if o.Err == nil {
 				o.Err = fmt.Errorf("auto-analyze %s: %w", t.ID, cbErr)
 			} else {

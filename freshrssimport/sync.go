@@ -40,17 +40,17 @@ type Result struct {
 	Errors     []error
 }
 
-// OnVideoIngestedFunc is called once per newly-ingested video link
-// (kind=="video", isNew=true). Errors are appended to Result.Errors but do
+// OnIngestedFunc is called once per newly-ingested link (isNew=true), for any
+// kind, with the source body text. Errors are appended to Result.Errors but do
 // not abort sync. Implementations are typically a closure that wraps an
 // analyze step and persists summary+tags via *links.Store.ApplyAnalysis.
-type OnVideoIngestedFunc func(ctx context.Context, linkID uuid.UUID, url, title string) error
+type OnIngestedFunc func(ctx context.Context, linkID uuid.UUID, kind, url, title, body string) error
 
 // Sync pulls all unread FreshRSS articles, ingests them via links.IngestOne
 // (deduping on canonical URL), and marks each successfully-ingested article
 // as read. Per-article errors are collected and returned; they don't abort
 // the run.
-func Sync(ctx context.Context, fr Lister, store *links.Store, onVideoIngested OnVideoIngestedFunc) (*Result, error) {
+func Sync(ctx context.Context, fr Lister, store *links.Store, onIngested OnIngestedFunc) (*Result, error) {
 	ctx, span := tracer.Start(ctx, "freshrssimport.sync")
 	exechistory.MarkExecution(span, "freshrss-sync")
 	defer span.End()
@@ -74,7 +74,7 @@ func Sync(ctx context.Context, fr Lister, store *links.Store, onVideoIngested On
 	g.SetLimit(concurrency)
 	for i, a := range arts {
 		g.Go(func() error {
-			outcomes[i] = processArticle(gctx, fr, store, a, onVideoIngested)
+			outcomes[i] = processArticle(gctx, fr, store, a, onIngested)
 			return nil // never abort siblings — per-item errors are collected
 		})
 	}
@@ -126,7 +126,7 @@ type articleOutcome struct {
 // freshrssimport") so it shows up in the executions waterfall — child
 // spans from freshrss.Mark, links.IngestOne, and any LLM analyze callback
 // nest underneath.
-func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshrss.Article, onVideoIngested OnVideoIngestedFunc) articleOutcome {
+func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshrss.Article, onIngested OnIngestedFunc) articleOutcome {
 	ctx, span := tracer.Start(ctx, "freshrssimport.process_article",
 		trace.WithAttributes(
 			attribute.String("article.id", a.ID),
@@ -164,8 +164,8 @@ func processArticle(ctx context.Context, fr Lister, store *links.Store, a freshr
 		o.MarkedRead = true
 	}
 
-	if isNew && kind == "video" && onVideoIngested != nil {
-		if cbErr := onVideoIngested(ctx, id, a.URL, a.Title); cbErr != nil {
+	if isNew && onIngested != nil {
+		if cbErr := onIngested(ctx, id, kind, a.URL, a.Title, a.Summary); cbErr != nil {
 			if o.Err == nil {
 				o.Err = fmt.Errorf("auto-analyze %s: %w", a.ID, cbErr)
 			} else {

@@ -98,12 +98,12 @@ func runServe(ctx context.Context, cfgPath string) error {
 	// Build the video-aware analyzer (nil if OpenAI is unconfigured). Used
 	// both as the manual-click Analyzer for the HTTP server and as the
 	// engine behind the sync auto-analyze callback.
-	va := buildVideoAnalyzer(cfg)
+	va := buildAnalyzer(cfg)
 	var analyzer serve.Analyzer
 	if va != nil {
 		analyzer = va
 	}
-	onVideo := buildVideoAutoAnalyze(va, store)
+	onIngested := buildAutoAnalyze(cfg, va, store)
 
 	// Build the optional sync function — only if FreshRSS is configured.
 	var sync serve.SyncFn
@@ -121,7 +121,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 			return fmt.Errorf("freshrss client: %w", err)
 		}
 		sync = func(ctx context.Context) (string, error) {
-			res, err := freshrssimport.Sync(ctx, fr, store, onVideo)
+			res, err := freshrssimport.Sync(ctx, fr, store, onIngested)
 			if err != nil {
 				return "", err
 			}
@@ -139,7 +139,7 @@ func runServe(ctx context.Context, cfgPath string) error {
 				fmt.Fprintf(os.Stderr, "warn: todoist client: %v\n", err)
 			} else {
 				todoistSync = func(ctx context.Context) (string, error) {
-					res, err := todoistimport.Sync(ctx, td, store, onVideo)
+					res, err := todoistimport.Sync(ctx, td, store, onIngested)
 					if err != nil {
 						return "", err
 					}

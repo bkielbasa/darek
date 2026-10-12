@@ -46,6 +46,8 @@ func run() error {
 		return runFreshRSS(ctx, cfgPath, args)
 	case "todoist":
 		return runTodoist(ctx, cfgPath, args)
+	case "links":
+		return runLinks(ctx, cfgPath, args)
 	case "blog":
 		return runBlog(ctx, cfgPath, args)
 	case "serve":
@@ -53,6 +55,6 @@ func run() error {
 	case "", "chat":
 		return runChat(ctx, cfgPath, strings.Join(args, " "))
 	default:
-		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar, mail, freshrss, todoist, blog, serve)", cmd)
+		return fmt.Errorf("unknown subcommand %q (try: chat, migrate, doctor, calendar, mail, freshrss, todoist, links, blog, serve)", cmd)
 	}
 }

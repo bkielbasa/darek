@@ -131,6 +131,14 @@ func applyDefaults(c *Config) {
 	if c.OTEL.ServiceName == "" {
 		c.OTEL.ServiceName = "darek"
 	}
+	if c.Analyze.Enabled {
+		if len(c.Analyze.Kinds) == 0 {
+			c.Analyze.Kinds = []string{"article", "video"}
+		}
+		if c.Analyze.TagVocabLimit == 0 {
+			c.Analyze.TagVocabLimit = 200
+		}
+	}
 	if c.ExecutionHistory.Enabled {
 		if c.ExecutionHistory.Retention == 0 {
 			c.ExecutionHistory.Retention = 720 * time.Hour

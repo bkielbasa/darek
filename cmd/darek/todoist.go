@@ -91,9 +91,9 @@ func runTodoistSync(ctx context.Context, cfgPath string) (retErr error) {
 	}
 
 	store := links.NewStore(pool)
-	va := buildVideoAnalyzer(cfg)
-	onVideo := buildVideoAutoAnalyze(va, store)
-	res, err := todoistimport.Sync(ctx, td, store, onVideo)
+	va := buildAnalyzer(cfg)
+	onIngested := buildAutoAnalyze(cfg, va, store)
+	res, err := todoistimport.Sync(ctx, td, store, onIngested)
 	if err != nil {
 		return fmt.Errorf("sync: %w", err)
 	}
