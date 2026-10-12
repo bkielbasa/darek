@@ -84,3 +84,41 @@ func TestAnalyze_PropagatesChatError(t *testing.T) {
 	_, err := a.Analyze(context.Background(), analyze.Input{Title: "t", URL: "u"})
 	require.Error(t, err)
 }
+
+func TestAnalyze_ReuseKnownTags(t *testing.T) {
+	fc := &fakeChat{content: `{"summary":"x","tags":["Go","performance","Newthing"]}`}
+	a := analyze.New(fc)
+	out, err := a.Analyze(context.Background(), analyze.Input{
+		Title:     "t",
+		URL:       "u",
+		KnownTags: []string{"go", "golang", "distributed-systems"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"go", "performance", "newthing"}, out.Tags)
+}
+
+func TestAnalyze_CanonicalizeFormats(t *testing.T) {
+	fc := &fakeChat{content: `{"summary":"x","tags":["Distributed Systems","GO"]}`}
+	a := analyze.New(fc)
+	out, err := a.Analyze(context.Background(), analyze.Input{
+		Title:     "t",
+		URL:       "u",
+		KnownTags: []string{"distributed-systems", "go"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []string{"distributed-systems", "go"}, out.Tags,
+		"punctuation/case variants collapse onto the vocabulary spelling")
+}
+
+func TestAnalyze_KnownTagsInPrompt(t *testing.T) {
+	fc := &fakeChat{content: `{"summary":"x","tags":["go"]}`}
+	a := analyze.New(fc)
+	_, err := a.Analyze(context.Background(), analyze.Input{
+		Title:     "t",
+		URL:       "u",
+		KnownTags: []string{"go", "rust"},
+	})
+	require.NoError(t, err)
+	sys := fc.gotMsgs[0].OfSystem.Content.OfString.Value
+	require.Contains(t, sys, "go, rust")
+}

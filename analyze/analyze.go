@@ -13,9 +13,10 @@ import (
 // tweets, links with no source-provided text); the prompt instructs the model
 // to fall back to the title in that case.
 type Input struct {
-	Title string
-	URL   string
-	Body  string
+	Title     string
+	URL       string
+	Body      string
+	KnownTags []string // existing vocabulary; the model is asked to reuse these
 }
 
 // Output is the parsed model result. Summary is plain text, Tags are
@@ -54,9 +55,15 @@ func (a *Analyzer) Analyze(ctx context.Context, in Input) (Output, error) {
 	}
 	user := fmt.Sprintf("Title: %s\nURL: %s\nBody:\n%s", in.Title, in.URL, body)
 
+	prompt := systemPrompt
+	if len(in.KnownTags) > 0 {
+		prompt += "\nPrefer these existing tags when they fit, using their exact spelling: " +
+			strings.Join(in.KnownTags, ", ") + "."
+	}
+
 	resp, err := a.llm.Chat(ctx, openai.ChatCompletionNewParams{
 		Messages: []openai.ChatCompletionMessageParamUnion{
-			openai.SystemMessage(systemPrompt),
+			openai.SystemMessage(prompt),
 			openai.UserMessage(user),
 		},
 	})
@@ -77,7 +84,7 @@ func (a *Analyzer) Analyze(ctx context.Context, in Input) (Output, error) {
 	}
 	return Output{
 		Summary: strings.TrimSpace(raw.Summary),
-		Tags:    normalizeTags(raw.Tags),
+		Tags:    canonicalize(normalizeTags(raw.Tags), in.KnownTags),
 	}, nil
 }
 
@@ -100,4 +107,47 @@ func normalizeTags(in []string) []string {
 		}
 	}
 	return out
+}
+
+// canonicalize maps tags onto the known vocabulary when they match ignoring
+// case and non-alphanumeric characters (so "Go", "go", and "GO!" all collapse
+// onto the vocabulary's spelling) and dedupes the result. Tags with no match
+// are kept as-is.
+func canonicalize(tags, known []string) []string {
+	if len(known) == 0 {
+		return tags
+	}
+	byKey := make(map[string]string, len(known))
+	for _, k := range known {
+		if key := tagKey(k); key != "" {
+			if _, ok := byKey[key]; !ok {
+				byKey[key] = k
+			}
+		}
+	}
+	seen := make(map[string]struct{}, len(tags))
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		if canon, ok := byKey[tagKey(t)]; ok {
+			t = canon
+		}
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		out = append(out, t)
+	}
+	return out
+}
+
+// tagKey normalizes a tag for matching: lowercase and drop every character
+// that is not a letter or digit.
+func tagKey(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
