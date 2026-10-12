@@ -141,3 +141,49 @@ func TestStore_ApplyAnalysis(t *testing.T) {
 	require.NotNil(t, got.AnalyzedAt)
 	require.ElementsMatch(t, []string{"existing", "new"}, got.Tags)
 }
+
+func TestStore_TagVocabulary(t *testing.T) {
+	_, pool := pg.Start(t)
+	require.NoError(t, db.Migrate(context.Background(), pool))
+	s := NewStore(db.Wrap(pool))
+	ctx := context.Background()
+
+	five := 5
+	for _, in := range []SaveInput{
+		{URL: "https://e.com/1", Title: "a", Tags: []string{"go", "concurrency"}, Rating: &five},
+		{URL: "https://e.com/2", Title: "b", Tags: []string{"go", "databases"}},
+		{URL: "https://e.com/3", Title: "c", Tags: []string{"go"}},
+	} {
+		_, err := s.Save(ctx, in)
+		require.NoError(t, err)
+	}
+
+	tags, err := s.TagVocabulary(ctx, 10)
+	require.NoError(t, err)
+	require.Equal(t, []string{"go", "concurrency", "databases"}, tags,
+		"ordered by usage desc, then name")
+}
+
+func TestStore_PendingAnalysis(t *testing.T) {
+	_, pool := pg.Start(t)
+	require.NoError(t, db.Migrate(context.Background(), pool))
+	s := NewStore(db.Wrap(pool))
+	ctx := context.Background()
+
+	_, err := s.Save(ctx, SaveInput{URL: "https://example.com/v", Title: "V", Kind: "video", Source: "freshrss"})
+	require.NoError(t, err)
+	_, err = s.Save(ctx, SaveInput{URL: "https://example.com/a", Title: "A", Kind: "article", Source: "freshrss"})
+	require.NoError(t, err)
+	doneID, err := s.Save(ctx, SaveInput{URL: "https://example.com/done", Title: "D"})
+	require.NoError(t, err)
+	require.NoError(t, s.ApplyAnalysis(ctx, doneID, "s", []string{"t"}))
+
+	all, err := s.PendingAnalysis(ctx, "", 10)
+	require.NoError(t, err)
+	require.Len(t, all, 2, "analyzed rows excluded")
+
+	arts, err := s.PendingAnalysis(ctx, "article", 10)
+	require.NoError(t, err)
+	require.Len(t, arts, 1)
+	require.Equal(t, "article", arts[0].Kind)
+}

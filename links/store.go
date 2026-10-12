@@ -32,6 +32,10 @@ type Link struct {
 	UpdatedAt  time.Time
 }
 
+// linkColumns is the canonical SELECT list for a Link, shared by every query
+// that scans into scanLinks (plus any extra computed columns appended per call).
+const linkColumns = `id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, kind, coalesce(feed,''), coalesce(summary,''), analyzed_at, created_at, updated_at`
+
 type Store struct {
 	pool *db.Pool
 	m    *obs.Metrics
@@ -218,7 +222,7 @@ func (s *Store) Search(ctx context.Context, o SearchOpts) ([]Link, error) {
 	args = append(args, o.Limit)
 
 	q := `
-		SELECT id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, kind, coalesce(feed,''), coalesce(summary,''), analyzed_at, created_at, updated_at
+		SELECT ` + linkColumns + `
 		FROM links
 		WHERE ` + strings.Join(conds, " AND ") + `
 		ORDER BY ` + orderBy(o) + `
@@ -248,7 +252,7 @@ func (s *Store) Similar(ctx context.Context, text string, limit int) ([]Link, er
 		limit = 10
 	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, kind, coalesce(feed,''), coalesce(summary,''), analyzed_at, created_at, updated_at,
+		SELECT `+linkColumns+`,
 		       ts_rank(search, plainto_tsquery('simple', $1)) AS rank
 		FROM links
 		WHERE rating IS NOT NULL
@@ -333,7 +337,7 @@ func (s *Store) Pool() *db.Pool { return s.pool }
 // Get returns a single link by id.
 func (s *Store) Get(ctx context.Context, id uuid.UUID) (Link, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, url, coalesce(title,''), rating, tags, coalesce(notes,''), source, kind, coalesce(feed,''), coalesce(summary,''), analyzed_at, created_at, updated_at
+		SELECT `+linkColumns+`
 		FROM links WHERE id = $1
 	`, id)
 	if err != nil {
@@ -364,4 +368,55 @@ func (s *Store) ApplyAnalysis(ctx context.Context, id uuid.UUID, summary string,
 		       updated_at  = now()
 		 WHERE id = $1`, id, summary, tags)
 	return err
+}
+
+// TagVocabulary returns the most-used tags across all links, descending by
+// usage then alphabetically. Used to steer the analyzer toward reusing tags
+// instead of creating near-duplicates.
+func (s *Store) TagVocabulary(ctx context.Context, limit int) ([]string, error) {
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT tag
+		  FROM links, unnest(tags) AS tag
+		 WHERE tag <> ''
+		 GROUP BY tag
+		 ORDER BY count(*) DESC, tag ASC
+		 LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// PendingAnalysis returns links that have not been analyzed yet, newest first.
+// kind "" means all kinds.
+func (s *Store) PendingAnalysis(ctx context.Context, kind string, limit int) ([]Link, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	q := `SELECT ` + linkColumns + ` FROM links WHERE analyzed_at IS NULL`
+	args := []any{}
+	if kind != "" {
+		args = append(args, kind)
+		q += fmt.Sprintf(" AND kind = $%d", len(args))
+	}
+	args = append(args, limit)
+	q += fmt.Sprintf(" ORDER BY created_at DESC LIMIT $%d", len(args))
+	rows, err := s.pool.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanLinks(rows)
 }
