@@ -53,6 +53,8 @@ Open Jaeger at <http://localhost:16686>.
 | `darek mail sync [--account=<nickname>]` | Pull new envelopes from IMAP into Postgres. |
 | `darek freshrss sync` | Pull unread FreshRSS articles into the local link store. |
 | `darek todoist sync` | Import any #Inbox tasks containing URLs and complete them in Todoist. |
+| `darek links analyze [--limit N] [--kind article\|video]` | Backfill summaries + tags for links that haven't been analyzed. |
+| `darek links embed` | Backfill embeddings for links used by the recommender. |
 
 ## Agent tools
 
@@ -66,6 +68,7 @@ These are the tools the agent can call inside `darek chat`. Each is gated on rel
 - `links.save(url, rating?, tags?, notes?)` — save/update by URL; tags merge by default.
 - `links.search(query?, min_rating?, tags?, since?)` — full-text + filters.
 - `links.similar(text)` — finds your rated links most similar to a piece of text.
+- `links.recommend(count?, kind?, include_seen?)` — suggests unread articles/videos to read next from your rating history. Never repeats earlier suggestions unless `include_seen: true`.
 
 **Calendar**
 - `calendar.list_events(from?, to?, calendar?)` — list events; empty `calendar` = all sources.
@@ -95,6 +98,8 @@ tools/freshrss/ GReader-protocol RSS client + tools
 tools/mail/     MailAccount interface, IMAP sync, mail tools
 memory/         Postgres-backed notes + recall/save tools
 links/          taste-graph store + save/search/similar tools
+analyze/        link summarization + tag proposals (OpenAI)
+recommend/      rating-driven recommender (embeddings + LLM selector)
 obs/            OTEL setup, metrics, redactor, slog
 db/             pgx pool + embedded migrations
 config/         YAML loader + secret resolver
@@ -124,6 +129,47 @@ Example:
 ./darek "save https://research.swtch.com/gomm — Go memory model, rated 5, tags go,concurrency, notes core reading"
 ./darek "I'm reading 'Concurrency Patterns in Distributed Systems' — would I like it?"
 ```
+
+### Auto-analysis on ingest
+
+When `analyze.enabled: true`, every newly ingested link (FreshRSS or Todoist) is summarized and tagged without clicking **analyze**, reusing your existing tag vocabulary so tags stay consistent:
+
+```yaml
+analyze:
+  enabled: true
+  kinds: [article, video]   # which link kinds to auto-analyze
+  tag_vocab_limit: 200      # how many existing tags to offer the model
+```
+
+Videos are analyzed from their transcript, articles from the source summary. Failures are logged and skipped; the link keeps `analyzed_at` unset so you can analyze it later from the UI. Backfill links ingested before the feature was enabled:
+
+```bash
+./darek links analyze --limit 600          # all kinds
+./darek links analyze --kind article       # one kind
+```
+
+### Reading recommendations
+
+When `recommend.enabled: true`, darek builds a taste profile from your ratings and suggests up to a few unread links to read next:
+
+```yaml
+recommend:
+  enabled: true
+  count: 3               # suggestions per run
+  candidate_pool: 30     # candidates retrieved before the LLM picks
+  min_liked: 3           # liked examples needed before using embeddings
+  lookback_days: 0       # 0 = any age
+  cooldown_days: 0       # 0 = never repeat a suggestion
+  embedding_model: text-embedding-3-small
+```
+
+Candidates are retrieved by vector similarity to your liked links (falling back to a full-text query over recently-liked titles when there aren't enough embeddings), then re-ranked by the LLM into at most `count` picks with a short reason each. Suggestions are recorded so they're never surfaced twice. Backfill embeddings for existing links:
+
+```bash
+./darek links embed
+```
+
+The same picks appear as a **Reading suggestions** section in the daily digest, and are available in chat via `links.recommend`.
 
 ## Calendars
 
@@ -171,7 +217,7 @@ Run it ad-hoc, or hook it up to cron / launchd:
 
 The email renders as a card per day (rounded corners, calendar-name pills colored by hash, "Today" badge on the first card) with a plaintext fallback. Each event line shows time, calendar, summary, and optional location. Empty days print "Nothing scheduled" rather than being hidden, so a silent miss is debuggable.
 
-When WhatsApp is configured (see the WhatsApp section below) and at least one group is opted in, this email also includes a per-group summary of recent WhatsApp activity below the calendar. When `memory.enabled: true`, a "Follow-ups" / "People" section appears between the calendar and WhatsApp sections (see Cross-digest memory below).
+When WhatsApp is configured (see the WhatsApp section below) and at least one group is opted in, this email also includes a per-group summary of recent WhatsApp activity below the calendar. When `memory.enabled: true`, a "Follow-ups" / "People" section appears between the calendar and WhatsApp sections (see Cross-digest memory below). When `recommend.enabled: true`, a "Reading suggestions" section appears between the calendar and the follow-ups section (see [Reading recommendations](#reading-recommendations)).
 
 Exits non-zero with a clear stderr message if `to` or `from_account` is missing or `from_account` doesn't match a configured `mail.accounts[].nickname`.
 
@@ -305,7 +351,7 @@ URL canonicalization (strip `utm_*`, `fbclid`, etc.) deduplicates the same artic
 
 Each row has an **analyze** button that asks OpenAI to summarize the link and propose tags. Click it; the row updates in place. Tags merge into existing tags; the proposed summary overwrites whatever the source provided. Re-clicking refreshes both. The button is hidden if `openai.api_key_env` is unset.
 
-When `darek serve` (or the standalone `darek freshrss sync` / `darek todoist sync` cron commands) ingests a new YouTube video URL, it automatically fetches the transcript and runs the analyze step against the transcript instead of the YouTube description. Summary + tags are stored on the link without manual interaction. Failures (no captions, region-locked, OpenAI unavailable) are logged but don't abort sync; the row stays ingested with no `analyzed_at` set so you can click Analyze later.
+When `darek serve` (or the standalone `darek freshrss sync` / `darek todoist sync` cron commands) ingests a new link, it automatically runs the analyze step (gated on `analyze.enabled`, see [Auto-analysis on ingest](#auto-analysis-on-ingest)): articles from the source summary, YouTube videos from their transcript. Summary + tags are stored on the link without manual interaction, reusing your existing tag vocabulary. Failures (no captions, region-locked, OpenAI unavailable) are logged but don't abort sync; the row stays ingested with no `analyzed_at` set so you can click Analyze later.
 
 ## Mail
 
