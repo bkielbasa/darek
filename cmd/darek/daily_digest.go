@@ -12,6 +12,7 @@ import (
 	"darek/db"
 	"darek/llm"
 	"darek/memory"
+	"darek/recommend"
 	"darek/tools/calendar"
 	"darek/tools/calendar/digest"
 	googlecal "darek/tools/calendar/google"
@@ -53,10 +54,10 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 		return fmt.Errorf("smtp secret for %s: %w", mailAcct.Nickname, err)
 	}
 
-	// Open Postgres only when WhatsApp is enabled — calendar-only deployments
-	// shouldn't require DAREK_POSTGRES_URL.
+	// Open Postgres only when WhatsApp or recommendations are enabled —
+	// calendar-only deployments shouldn't require DAREK_POSTGRES_URL.
 	var pool *db.Pool
-	if cfg.WhatsApp.Enabled {
+	if cfg.WhatsApp.Enabled || cfg.Recommend.Enabled {
 		dsn, err := config.ResolveSecret("env:" + cfg.Postgres.URLEnv)
 		if err != nil {
 			return fmt.Errorf("postgres dsn (whatsapp digest): %w", err)
@@ -186,7 +187,55 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 		}
 	}
 
-	// Section order: calendar → follow-ups/people → whatsapp.
+	// Build the reading-suggestions section from rated links when enabled.
+	// Failures are logged and skipped so they never prevent the calendar
+	// digest from going out.
+	var recText, recHTML string
+	if cfg.Recommend.Enabled && pool != nil {
+		apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
+		switch {
+		case err != nil || apiKey == "":
+			fmt.Fprintf(os.Stderr, "info: openai not configured, skipping recommendations\n")
+		default:
+			llmClient, err := llm.New(llm.Options{
+				APIKey:  apiKey,
+				BaseURL: cfg.OpenAI.BaseURL,
+				Model:   cfg.OpenAI.Model,
+				Timeout: cfg.Agent.LLMTimeout,
+			})
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warn: llm client for recommendations: %v\n", err)
+			} else {
+				ro := cfg.Recommend.WithDefaults()
+				recStore := recommend.NewStore(pool)
+				res, err := recommend.Build(ctx, recStore, llmClient, recommend.NewSelector(llmClient), recommend.Options{
+					Count:          ro.Count,
+					CandidatePool:  ro.CandidatePool,
+					LookbackDays:   ro.LookbackDays,
+					CooldownDays:   ro.CooldownDays,
+					MinLiked:       ro.MinLiked,
+					EmbeddingModel: ro.EmbeddingModel,
+					EmbedLimit:     ro.EmbedLimit,
+					EmbedBatch:     ro.EmbedBatch,
+				}, "digest", logf)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "warn: recommendations failed: %v\n", err)
+				} else if len(res.Suggestions) > 0 {
+					recText = recommend.RenderText(res.Suggestions)
+					recHTML = recommend.RenderHTML(res.Suggestions)
+				}
+				fmt.Fprintf(os.Stderr, "info: recommendations: embedded=%d candidates=%d vector=%t picks=%d\n",
+					res.Embedded, res.Candidates, res.Vector, len(res.Suggestions))
+			}
+		}
+	}
+
+	// Section order: calendar → reading suggestions → follow-ups/people →
+	// whatsapp.
+	if recText != "" {
+		text += "\n\n" + recText
+		html += recHTML
+	}
 	if memText != "" {
 		text += "\n\n" + memText
 		html += memHTML
