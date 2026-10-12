@@ -58,6 +58,11 @@ type Metrics struct {
 
 	// WhatsApp ingest
 	WhatsAppMessages metric.Int64Counter
+
+	// Reading recommendations
+	RecommendRuns        metric.Int64Counter
+	RecommendSuggestions metric.Int64Counter
+	RecommendEmbeddings  metric.Int64Counter
 }
 
 var (
@@ -124,6 +129,9 @@ func MetricsInstance() (*Metrics, error) {
 			BlogMarketingPublishDuration:    f64hist(m.Float64Histogram("darek.blog_marketing.publish_duration", metric.WithUnit("s"))),
 			BlogMarketingRegenerateDuration: f64hist(m.Float64Histogram("darek.blog_marketing.regenerate_duration", metric.WithUnit("s"))),
 			WhatsAppMessages:          i64(m.Int64Counter("darek.whatsapp.messages_ingested")),
+			RecommendRuns:             i64(m.Int64Counter("darek.recommend.runs")),
+			RecommendSuggestions:      i64(m.Int64Counter("darek.recommend.suggestions")),
+			RecommendEmbeddings:       i64(m.Int64Counter("darek.recommend.embeddings")),
 		}
 		metricsErr = err
 	})
