@@ -43,8 +43,13 @@ func Candidates(ctx context.Context, store *Store, p Profile, opt Options) ([]Ca
 		perKind = 10
 	}
 
+	cooldown := opt.CooldownDays
+	if opt.IncludeSeen {
+		cooldown = -1
+	}
+
 	if p.LikedCentroid != nil && len(p.Liked) >= opt.MinLiked {
-		cands, err := store.VectorCandidates(ctx, p.LikedCentroid, p.DislikedCentroid, opt.LookbackDays, opt.CooldownDays, perKind)
+		cands, err := store.VectorCandidates(ctx, p.LikedCentroid, p.DislikedCentroid, opt.LookbackDays, cooldown, perKind)
 		if err != nil {
 			return nil, false, err
 		}
@@ -61,7 +66,7 @@ func Candidates(ctx context.Context, store *Store, p Profile, opt Options) ([]Ca
 	if q == "" {
 		return nil, false, nil
 	}
-	cands, err := store.TextCandidates(ctx, q, opt.LookbackDays, opt.CooldownDays, perKind)
+	cands, err := store.TextCandidates(ctx, q, opt.LookbackDays, cooldown, perKind)
 	return cands, false, err
 }
 

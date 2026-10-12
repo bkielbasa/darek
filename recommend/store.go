@@ -313,10 +313,14 @@ func lookbackClause(args *[]any, days int) string {
 	return fmt.Sprintf(" AND created_at > now() - make_interval(days => $%d::int)", len(*args))
 }
 
-// cooldownClause excludes links already recommended. cooldownDays<=0 means
-// "never repeat"; a positive value only excludes recent suggestions.
+// cooldownClause excludes links already recommended. A negative value means
+// "ignore seen" (no filter); cooldownDays==0 means "never repeat"; a positive
+// value only excludes recent suggestions.
 func cooldownClause(args *[]any, cooldownDays int) string {
-	if cooldownDays <= 0 {
+	if cooldownDays < 0 {
+		return ""
+	}
+	if cooldownDays == 0 {
 		return " AND NOT EXISTS (SELECT 1 FROM link_recommendations r WHERE r.link_id = links.id)"
 	}
 	*args = append(*args, cooldownDays)
