@@ -38,7 +38,13 @@ func BuildProfile(ctx context.Context, store *Store) (Profile, error) {
 // pgvector path when there are enough embedded liked examples, and falls back
 // to a full-text query built from recently-liked titles otherwise.
 func Candidates(ctx context.Context, store *Store, p Profile, opt Options) ([]Candidate, bool, error) {
-	perKind := opt.CandidatePool / 2
+	perKind := opt.CandidatePool
+	if perKind <= 0 {
+		perKind = 30
+	}
+	if opt.Kind == "" {
+		perKind /= 2
+	}
 	if perKind <= 0 {
 		perKind = 10
 	}
@@ -49,7 +55,15 @@ func Candidates(ctx context.Context, store *Store, p Profile, opt Options) ([]Ca
 	}
 
 	if p.LikedCentroid != nil && len(p.Liked) >= opt.MinLiked {
-		cands, err := store.VectorCandidates(ctx, p.LikedCentroid, p.DislikedCentroid, opt.LookbackDays, cooldown, perKind)
+		var (
+			cands []Candidate
+			err   error
+		)
+		if opt.Kind != "" {
+			cands, err = store.vectorKind(ctx, opt.Kind, p.LikedCentroid, p.DislikedCentroid, opt.LookbackDays, cooldown, perKind)
+		} else {
+			cands, err = store.VectorCandidates(ctx, p.LikedCentroid, p.DislikedCentroid, opt.LookbackDays, cooldown, perKind)
+		}
 		if err != nil {
 			return nil, false, err
 		}
@@ -65,6 +79,10 @@ func Candidates(ctx context.Context, store *Store, p Profile, opt Options) ([]Ca
 	q := textQuery(titles, 8)
 	if q == "" {
 		return nil, false, nil
+	}
+	if opt.Kind != "" {
+		cands, err := store.textKind(ctx, opt.Kind, q, opt.LookbackDays, cooldown, perKind)
+		return cands, false, err
 	}
 	cands, err := store.TextCandidates(ctx, q, opt.LookbackDays, cooldown, perKind)
 	return cands, false, err

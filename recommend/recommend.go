@@ -19,6 +19,8 @@ type Options struct {
 	EmbeddingModel string
 	EmbedLimit     int
 	EmbedBatch     int
+	// Kind optionally restricts candidates to one kind ("article"|"video").
+	Kind string
 	// IncludeSeen allows already-recommended links back into the candidate
 	// pool (ignores the never-repeat filter).
 	IncludeSeen bool

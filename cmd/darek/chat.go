@@ -18,6 +18,7 @@ import (
 	"darek/llm"
 	"darek/memory"
 	"darek/obs"
+	"darek/recommend"
 	"darek/tools"
 	"darek/tools/calendar"
 	googlecal "darek/tools/calendar/google"
@@ -105,6 +106,19 @@ func runChat(ctx context.Context, cfgPath, userInput string) error {
 		if err := reg.Register(t); err != nil {
 			return err
 		}
+	}
+	ro := cfg.Recommend.WithDefaults()
+	if err := reg.Register(recommend.NewTool(recommend.NewStore(pool), llmClient, recommend.Options{
+		Count:          ro.Count,
+		CandidatePool:  ro.CandidatePool,
+		LookbackDays:   ro.LookbackDays,
+		CooldownDays:   ro.CooldownDays,
+		MinLiked:       ro.MinLiked,
+		EmbeddingModel: ro.EmbeddingModel,
+		EmbedLimit:     ro.EmbedLimit,
+		EmbedBatch:     ro.EmbedBatch,
+	})); err != nil {
+		return err
 	}
 
 	// Calendar sources
