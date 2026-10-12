@@ -169,4 +169,3 @@ func (cl *Client) Embed(ctx context.Context, model string, inputs []string) ([][
 	}
 	return out, nil
 }
-
