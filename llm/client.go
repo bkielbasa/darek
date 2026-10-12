@@ -117,7 +117,7 @@ func (cl *Client) Model() string { return cl.model }
 // Embed returns one embedding vector per input, in the same order. model is an
 // embedding model (e.g. text-embedding-3-small) and is independent of the chat
 // model configured on the client.
-func (cl *Client) Embed(ctx context.Context, model string, inputs []string) ([][]float64, error) {
+func (cl *Client) Embed(ctx context.Context, model string, inputs []string) ([][]float32, error) {
 	if model == "" {
 		return nil, errors.New("embedding model required")
 	}
@@ -154,13 +154,17 @@ func (cl *Client) Embed(ctx context.Context, model string, inputs []string) ([][
 	tokenAttr := metric.WithAttributes(attribute.String("model", model))
 	cl.m.TokensInput.Add(ctx, resp.Usage.PromptTokens, tokenAttr)
 
-	out := make([][]float64, len(inputs))
+	out := make([][]float32, len(inputs))
 	for _, e := range resp.Data {
 		i := int(e.Index)
 		if i < 0 || i >= len(out) {
 			return nil, fmt.Errorf("embed: index %d out of range", e.Index)
 		}
-		out[i] = e.Embedding
+		v := make([]float32, len(e.Embedding))
+		for j, f := range e.Embedding {
+			v[j] = float32(f)
+		}
+		out[i] = v
 	}
 	for i, v := range out {
 		if v == nil {

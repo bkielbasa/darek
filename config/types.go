@@ -13,6 +13,7 @@ type Config struct {
 	Memory    Memory        `yaml:"memory"`
 	Links     Links         `yaml:"links"`
 	Analyze   Analyze       `yaml:"analyze"`
+	Recommend Recommend     `yaml:"recommend"`
 	Todoist   Todoist       `yaml:"todoist"`
 	FreshRSS  FreshRSS      `yaml:"freshrss"`
 	Calendars []CalendarSrc `yaml:"calendars"`
@@ -70,6 +71,42 @@ type Analyze struct {
 	Enabled       bool     `yaml:"enabled"`
 	Kinds         []string `yaml:"kinds"`           // default: article, video
 	TagVocabLimit int      `yaml:"tag_vocab_limit"` // existing tags fed to the analyzer; default 200
+}
+
+// Recommend configures the daily reading recommender.
+type Recommend struct {
+	Enabled        bool   `yaml:"enabled"`
+	Count          int    `yaml:"count"`          // suggestions per run; default 3
+	CandidatePool  int    `yaml:"candidate_pool"` // candidates retrieved per run; default 30
+	LookbackDays   int    `yaml:"lookback_days"`  // 0 = any age
+	CooldownDays   int    `yaml:"cooldown_days"`  // 0 = never repeat
+	MinLiked       int    `yaml:"min_liked"`      // liked examples needed before using embeddings; default 3
+	EmbeddingModel string `yaml:"embedding_model"`
+	EmbedBatch     int    `yaml:"embed_batch"` // default 64
+	EmbedLimit     int    `yaml:"embed_limit"` // per Build run; default 256
+}
+
+// WithDefaults returns a copy with zero fields filled in.
+func (r Recommend) WithDefaults() Recommend {
+	if r.Count <= 0 {
+		r.Count = 3
+	}
+	if r.CandidatePool <= 0 {
+		r.CandidatePool = 30
+	}
+	if r.MinLiked <= 0 {
+		r.MinLiked = 3
+	}
+	if r.EmbeddingModel == "" {
+		r.EmbeddingModel = "text-embedding-3-small"
+	}
+	if r.EmbedBatch <= 0 {
+		r.EmbedBatch = 64
+	}
+	if r.EmbedLimit <= 0 {
+		r.EmbedLimit = 256
+	}
+	return r
 }
 
 type Todoist struct {

@@ -156,8 +156,8 @@ func TestEmbed_HappyPath(t *testing.T) {
 	vecs, err := cl.Embed(context.Background(), "text-embedding-3-small", []string{"a", "b"})
 	require.NoError(t, err)
 	require.Len(t, vecs, 2)
-	require.Equal(t, []float64{0.1, 0.2, 0.3}, vecs[0])
-	require.Equal(t, []float64{0.4, 0.5, 0.6}, vecs[1])
+	require.Equal(t, []float32{0.1, 0.2, 0.3}, vecs[0])
+	require.Equal(t, []float32{0.4, 0.5, 0.6}, vecs[1])
 }
 
 func TestEmbed_PropagatesError(t *testing.T) {

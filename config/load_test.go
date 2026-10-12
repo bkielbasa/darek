@@ -325,3 +325,18 @@ postgres: {url_env: PG}
 	require.False(t, cfg.Analyze.Enabled)
 	require.Empty(t, cfg.Analyze.Kinds)
 }
+
+func TestRecommendWithDefaults(t *testing.T) {
+	r := Recommend{}.WithDefaults()
+	require.Equal(t, 3, r.Count)
+	require.Equal(t, 30, r.CandidatePool)
+	require.Equal(t, 3, r.MinLiked)
+	require.Equal(t, "text-embedding-3-small", r.EmbeddingModel)
+	require.Equal(t, 64, r.EmbedBatch)
+	require.Equal(t, 256, r.EmbedLimit)
+
+	custom := Recommend{Count: 5, CooldownDays: 7, LookbackDays: 30}.WithDefaults()
+	require.Equal(t, 5, custom.Count)
+	require.Equal(t, 7, custom.CooldownDays)
+	require.Equal(t, 30, custom.LookbackDays)
+}

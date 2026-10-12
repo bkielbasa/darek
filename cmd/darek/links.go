@@ -13,7 +13,9 @@ import (
 	"darek/db"
 	"darek/exechistory"
 	"darek/links"
+	"darek/llm"
 	"darek/obs"
+	"darek/recommend"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -22,13 +24,15 @@ import (
 // runLinks dispatches `darek links <subcmd>`.
 func runLinks(ctx context.Context, cfgPath string, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: darek links analyze [--limit N] [--kind article|video]")
+		return fmt.Errorf("usage: darek links <analyze|embed>")
 	}
 	switch args[0] {
 	case "analyze":
 		return runLinksAnalyze(ctx, cfgPath, args[1:])
+	case "embed":
+		return runLinksEmbed(ctx, cfgPath, args[1:])
 	default:
-		return fmt.Errorf("unknown links subcommand %q (try: analyze)", args[0])
+		return fmt.Errorf("unknown links subcommand %q (try: analyze, embed)", args[0])
 	}
 }
 
@@ -123,5 +127,80 @@ func runLinksAnalyze(ctx context.Context, cfgPath string, args []string) (retErr
 	if failed > 0 {
 		return fmt.Errorf("%d of %d links failed", failed, len(rows))
 	}
+	return nil
+}
+
+// runLinksEmbed backfills embeddings for links that don't have one yet. It
+// powers the vector path of the recommender; the text fallback works without
+// it, but embeddings make suggestions much better.
+func runLinksEmbed(ctx context.Context, cfgPath string, args []string) (retErr error) {
+	fs := flag.NewFlagSet("links embed", flag.ContinueOnError)
+	limit := fs.Int("limit", 0, "max links to embed (0 = all pending)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		return err
+	}
+	dsn, err := config.ResolveSecret("env:" + cfg.Postgres.URLEnv)
+	if err != nil {
+		return err
+	}
+
+	otelSetup, otelShutdown, err := obs.Init(ctx, obs.Options{
+		ServiceName: cfg.OTEL.ServiceName,
+		Endpoint:    cfg.OTEL.ExporterEndpoint,
+		Insecure:    cfg.OTEL.Insecure,
+	})
+	if err != nil {
+		return fmt.Errorf("otel init: %w", err)
+	}
+	defer func() { _ = otelShutdown(context.Background()) }()
+
+	pool, err := db.Open(ctx, dsn)
+	if err != nil {
+		return fmt.Errorf("db: %w", err)
+	}
+	defer pool.Close()
+
+	if cfg.ExecutionHistory.Enabled {
+		otelSetup.TracerProvider.RegisterSpanProcessor(
+			exechistory.NewRecorder(pool, slog.Default()))
+	}
+
+	ctx, span := otel.Tracer("darek/cli").Start(ctx, "cli.links.embed")
+	exechistory.MarkExecution(span, "cli-links-embed")
+	defer func() {
+		if retErr != nil {
+			span.RecordError(retErr)
+			span.SetStatus(codes.Error, retErr.Error())
+		}
+		span.End()
+	}()
+
+	apiKey, err := config.ResolveSecret("env:" + cfg.OpenAI.APIKeyEnv)
+	if err != nil || apiKey == "" {
+		return fmt.Errorf("openai not configured; cannot embed")
+	}
+	llmClient, err := llm.New(llm.Options{
+		APIKey:  apiKey,
+		BaseURL: cfg.OpenAI.BaseURL,
+		Model:   cfg.OpenAI.Model,
+		Timeout: cfg.Agent.LLMTimeout,
+	})
+	if err != nil {
+		return fmt.Errorf("llm client: %w", err)
+	}
+
+	rec := cfg.Recommend.WithDefaults()
+	store := recommend.NewStore(pool)
+	embedded, err := recommend.EnsureEmbeddings(ctx, store, llmClient, rec.EmbeddingModel, *limit, rec.EmbedBatch)
+	if err != nil {
+		return fmt.Errorf("embed: %w", err)
+	}
+
+	fmt.Printf("links embed: embedded=%d\n", embedded)
 	return nil
 }
