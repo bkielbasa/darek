@@ -69,7 +69,7 @@ func TestBuildMemories_HappyPath(t *testing.T) {
 		},
 	}
 	ex := &stubExtractor{byGroup: map[string][]Candidate{
-		"Family": {{Kind: "agreement", Summary: "Dinner Sunday", DedupeKey: "dinner-sunday"}},
+		"Family": {{Kind: "agreement", Summary: "Dinner Sunday", DueAt: ptrTime(time.Now().Add(48 * time.Hour)), DedupeKey: "dinner-sunday"}},
 	}}
 
 	st, err := BuildMemories(ctx, src, store, ex, nil)
@@ -80,7 +80,7 @@ func TestBuildMemories_HappyPath(t *testing.T) {
 	require.Equal(t, 0, st.FailedGroups)
 	require.ElementsMatch(t, []string{"m1", "m2"}, src.marked)
 
-	items, err := store.ActiveItems(ctx, 14, 7, 10)
+	items, err := store.ActiveItems(ctx, 14, 10)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.Equal(t, "Family", items[0].Groups[0])

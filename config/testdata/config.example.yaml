@@ -35,6 +35,13 @@ freshrss:
 server:
   bind: 127.0.0.1:7777
 
+calendar_digest:
+  to: bart@example.com
+  from_account: personal
+  # optional; public base URL of `darek serve`. Adds clickable 1-5 stars to
+  # reading suggestions (GET /r/{id}/{value}); empty = no stars.
+  rate_base_url: https://darek.example.com
+
 calendars:
   - kind: ical
     nickname: family

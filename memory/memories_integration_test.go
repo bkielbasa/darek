@@ -41,7 +41,7 @@ func TestSaveMemories_InsertAndDedupe(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
 
-	items, err := s.ActiveItems(ctx, 14, 7, 10)
+	items, err := s.ActiveItems(ctx, 14, 10)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	require.Equal(t, "Dinner with Marek this Sunday", items[0].Summary)
@@ -72,7 +72,7 @@ func TestSaveMemories_PreservesStatusAndDueAt(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, n)
 
-	items, err := s.ActiveItems(ctx, 14, 7, 10)
+	items, err := s.ActiveItems(ctx, 14, 10)
 	require.NoError(t, err)
 	require.Empty(t, items, "done memory must not appear as active")
 
@@ -96,13 +96,13 @@ func TestActiveItems_FiltersAndOrders(t *testing.T) {
 	}, "G", []string{"x"})
 	require.NoError(t, err)
 
-	items, err := s.ActiveItems(ctx, 14, 7, 10)
+	items, err := s.ActiveItems(ctx, 14, 10)
 	require.NoError(t, err)
 	keys := []string{}
 	for _, m := range items {
 		keys = append(keys, m.DedupeKey)
 	}
-	require.Equal(t, []string{"overdue", "soon", "undated-recent"}, keys, "ordered by due_at ASC NULLS LAST; far + person_fact excluded")
+	require.Equal(t, []string{"overdue", "soon"}, keys, "ordered by due_at ASC; far, undated and person_fact excluded")
 }
 
 func TestPersonFacts_Window(t *testing.T) {

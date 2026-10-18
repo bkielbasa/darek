@@ -2,7 +2,9 @@ package serve
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"strconv"
 	"strings"
@@ -161,6 +163,55 @@ func (s *Server) handleRating(w http.ResponseWriter, r *http.Request) {
 func (s *Server) fetchOne(ctx context.Context, id uuid.UUID) (links.Link, error) {
 	return s.store.Get(ctx, id)
 }
+
+// handleRateLink is the email-friendly rating endpoint used by the digest's
+// star links: a plain GET that sets (never toggles — a re-click or an email
+// link prefetch must not clear a rating) the rating and renders a small
+// confirmation page. It is public because email clients won't carry a session
+// cookie; the unguessable link UUID is the only capability needed.
+func (s *Server) handleRateLink(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		http.Error(w, "bad id", http.StatusBadRequest)
+		return
+	}
+	n, err := strconv.Atoi(r.PathValue("value"))
+	if err != nil || n < 1 || n > 5 {
+		http.Error(w, "value must be 1..5", http.StatusBadRequest)
+		return
+	}
+	var artURL, dispTitle string
+	err = s.store.Pool().QueryRow(r.Context(),
+		`SELECT url, coalesce(nullif(btrim(title), ''), url) FROM links WHERE id = $1`, id).
+		Scan(&artURL, &dispTitle)
+	switch {
+	case errors.Is(err, links.ErrNoRows()):
+		http.Error(w, "unknown link", http.StatusNotFound)
+		return
+	case err != nil:
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := s.setRating(r.Context(), id, &n); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, rateThanksPage,
+		strings.Repeat("★", n)+strings.Repeat("☆", 5-n),
+		html.EscapeString(artURL), html.EscapeString(dispTitle))
+}
+
+// rateThanksPage is the confirmation shown after a digest star click. Inline
+// styles only — it renders in whatever webview the email client hands over.
+const rateThanksPage = `<!doctype html><html><body style="margin:0;display:flex;align-items:center;justify-content:center;height:100vh;background:#f6f3ec;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;color:#1c1c1c;">
+<div style="text-align:center;padding:2rem;">
+<div style="font-size:2.5rem;color:#d97757;letter-spacing:.15em;">%s</div>
+<p style="font-size:1.05rem;margin:.75rem 0;">Rated</p>
+<p style="margin:.25rem 0;"><a href="%s" style="color:#1a5fb4;">%s</a></p>
+<p style="margin-top:1.25rem;"><a href="/" style="color:#6b6b6b;font-size:.85em;">open darek</a></p>
+</div></body></html>
+`
 
 // setRating updates only the rating column. Goes through pool directly because
 // links.Save's nil-Rating means "leave alone", not "clear".

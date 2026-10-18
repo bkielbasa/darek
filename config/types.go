@@ -31,6 +31,10 @@ type CalendarDigest struct {
 	To          string `yaml:"to"`
 	FromAccount string `yaml:"from_account"`
 	Subject     string `yaml:"subject"` // optional; default "Calendar — <YYYY-MM-DD>"
+	// RateBaseURL, when set, is the public base URL of `darek serve` (e.g.
+	// "https://darek.example.com"). Reading suggestions then get clickable
+	// 1-5 stars that rate a link via GET /r/{id}/{value}. Empty → no stars.
+	RateBaseURL string `yaml:"rate_base_url"`
 }
 
 type OpenAI struct {

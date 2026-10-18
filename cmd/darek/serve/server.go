@@ -118,6 +118,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("POST /sync", s.handleSync)
 	s.mux.HandleFunc("POST /links/new", s.handleNew)
 	s.mux.HandleFunc("POST /links/{id}/rating", s.handleRating)
+	s.mux.HandleFunc("GET /r/{id}/{value}", s.handleRateLink) // email-friendly star ratings
 	s.mux.HandleFunc("POST /links/{id}/tags", s.handleTags)
 	s.mux.HandleFunc("POST /links/{id}/notes", s.handleNotes)
 	s.mux.HandleFunc("POST /links/{id}/kind", s.handleKind)

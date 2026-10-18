@@ -150,7 +150,7 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 		}
 	}
 
-	// Build the cross-digest memory section (follow-ups + people) when enabled.
+	// Build the cross-digest memory section (follow-ups) when enabled.
 	// Extraction persists independently of email success; failures are logged
 	// and skipped so they never prevent the calendar digest from going out.
 	var memText, memHTML string
@@ -221,8 +221,11 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "warn: recommendations failed: %v\n", err)
 				} else if len(res.Suggestions) > 0 {
-					recText = recommend.RenderText(res.Suggestions)
-					recHTML = recommend.RenderHTML(res.Suggestions)
+					// Star links point back at the web UI; empty RateBaseURL
+					// renders suggestions without them.
+					rateBase := strings.TrimSpace(d.RateBaseURL)
+					recText = recommend.RenderText(res.Suggestions, rateBase)
+					recHTML = recommend.RenderHTML(res.Suggestions, rateBase)
 				}
 				fmt.Fprintf(os.Stderr, "info: recommendations: embedded=%d candidates=%d vector=%t picks=%d\n",
 					res.Embedded, res.Candidates, res.Vector, len(res.Suggestions))
@@ -230,8 +233,7 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 		}
 	}
 
-	// Section order: calendar → reading suggestions → follow-ups/people →
-	// whatsapp.
+	// Section order: calendar → reading suggestions → follow-ups → whatsapp.
 	if recText != "" {
 		text += "\n\n" + recText
 		html += recHTML

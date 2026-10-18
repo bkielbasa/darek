@@ -97,7 +97,8 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 func isPublicPath(p string) bool {
 	return p == "/healthz" || p == "/metrics" ||
 		p == "/login" || p == "/logout" || p == "/auth/callback" ||
-		strings.HasPrefix(p, "/static/")
+		strings.HasPrefix(p, "/static/") ||
+		strings.HasPrefix(p, "/r/") // digest star ratings: email clients have no session cookie
 }
 
 // sanitizeNext keeps the user's intended URL safe to redirect back to.

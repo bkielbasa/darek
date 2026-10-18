@@ -140,19 +140,21 @@ func (s *Store) SaveMemories(ctx context.Context, cands []Candidate, group strin
 	return saved, nil
 }
 
-// ActiveItems returns active agreements/events due before now+horizonDays, or
-// undated but seen within recentDays. Ordered due_at ASC NULLS LAST, then recency.
-func (s *Store) ActiveItems(ctx context.Context, horizonDays, recentDays, limit int) ([]Memory, error) {
+// ActiveItems returns active agreements/events with a due date before
+// now+horizonDays (overdue included). Undated items are excluded — the digest
+// follow-ups section must only contain actionable, dated things. Ordered
+// due_at ASC, then recency.
+func (s *Store) ActiveItems(ctx context.Context, horizonDays, limit int) ([]Memory, error) {
 	rows, err := s.pool.Query(ctx, `
 		SELECT `+memoryColumns+`
 		  FROM memories
 		 WHERE status = 'active'
 		   AND kind IN ('agreement', 'event')
-		   AND ((due_at IS NOT NULL AND due_at < now() + make_interval(days => $1))
-		        OR (due_at IS NULL AND last_seen_at >= now() - make_interval(days => $2)))
-		 ORDER BY due_at ASC NULLS LAST, last_seen_at DESC
-		 LIMIT $3
-	`, horizonDays, recentDays, limit)
+		   AND due_at IS NOT NULL
+		   AND due_at < now() + make_interval(days => $1)
+		 ORDER BY due_at ASC, last_seen_at DESC
+		 LIMIT $2
+	`, horizonDays, limit)
 	if err != nil {
 		return nil, fmt.Errorf("query active: %w", err)
 	}
