@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -23,24 +24,25 @@ type Candidate struct {
 
 // Memory is a persisted structured memory row.
 type Memory struct {
-	ID         uuid.UUID
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
-	LastSeenAt time.Time
-	Kind       string
-	Summary    string
-	Details    string
-	People     []string
-	Groups     []string
-	DueAt      *time.Time
-	Status     string
-	DedupeKey  string
-	Source     string
-	SourceRefs []string
+	ID            uuid.UUID
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+	LastSeenAt    time.Time
+	Kind          string
+	Summary       string
+	Details       string
+	People        []string
+	Groups        []string
+	DueAt         *time.Time
+	Status        string
+	DedupeKey     string
+	Source        string
+	SourceRefs    []string
+	TodoistTaskID string
 }
 
 const memoryColumns = `id, created_at, updated_at, last_seen_at, kind, summary, details,
-	people, groups, due_at, status, dedupe_key, source, source_refs`
+	people, groups, due_at, status, dedupe_key, source, source_refs, todoist_task_id`
 
 // slug lowercases s and collapses every run of non-alphanumeric characters to a
 // single "-". ASCII-only: non-ASCII letters are separators, so name variants can
@@ -75,11 +77,13 @@ func collectMemories(rows pgx.Rows) ([]Memory, error) {
 	var out []Memory
 	for rows.Next() {
 		var m Memory
+		var todoistTaskID sql.NullString
 		if err := rows.Scan(&m.ID, &m.CreatedAt, &m.UpdatedAt, &m.LastSeenAt,
 			&m.Kind, &m.Summary, &m.Details, &m.People, &m.Groups, &m.DueAt,
-			&m.Status, &m.DedupeKey, &m.Source, &m.SourceRefs); err != nil {
+			&m.Status, &m.DedupeKey, &m.Source, &m.SourceRefs, &todoistTaskID); err != nil {
 			return nil, err
 		}
+		m.TodoistTaskID = todoistTaskID.String
 		out = append(out, m)
 	}
 	return out, rows.Err()
@@ -214,6 +218,13 @@ func (s *Store) ListMemories(ctx context.Context, query, kind, status string, li
 		return nil, fmt.Errorf("query list: %w", err)
 	}
 	return collectMemories(rows)
+}
+
+// SetTodoistTaskID records the Todoist task created for a memory so we don't
+// duplicate it on subsequent digests.
+func (s *Store) SetTodoistTaskID(ctx context.Context, id uuid.UUID, taskID string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE memories SET todoist_task_id = $2, updated_at = now() WHERE id = $1`, id, taskID)
+	return err
 }
 
 // SetMemoryStatus updates one memory's status. No caller exposes this in v1.

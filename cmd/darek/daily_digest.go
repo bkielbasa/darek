@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	googlecal "darek/tools/calendar/google"
 	"darek/tools/calendar/ical"
 	mailsmtp "darek/tools/mail/smtp"
+	"darek/tools/todoist"
 	"darek/tools/whatsapp"
 )
 
@@ -181,6 +183,20 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 				}
 				memText = memory.RenderText(view)
 				memHTML = memory.RenderHTML(view)
+
+				// Mirror actionable follow-ups into Todoist so they show up
+				// as tasks (tagged "darek") with their due dates. Non-fatal:
+				// a Todoist outage must not block the digest email.
+				if cfg.Todoist.TokenEnv != "" {
+					tdToken, terr := config.ResolveSecret("env:" + cfg.Todoist.TokenEnv)
+					if terr != nil || tdToken == "" {
+						fmt.Fprintf(os.Stderr, "info: todoist not configured, skipping follow-up tasks\n")
+					} else if td, terr := todoist.New(todoist.Options{Token: tdToken}); terr != nil {
+						fmt.Fprintf(os.Stderr, "warn: todoist client for follow-ups: %v\n", terr)
+					} else {
+						syncFollowupsToTodoist(ctx, td, memStore, view.Items, logf)
+					}
+				}
 				fmt.Fprintf(os.Stderr, "info: memory: groups=%d extracted=%d saved=%d failed=%d\n",
 					stats.Groups, stats.Extracted, stats.Saved, stats.FailedGroups)
 			}
@@ -296,4 +312,65 @@ func runDailyDigest(ctx context.Context, cfgPath string) error {
 	fmt.Fprintf(os.Stderr, "sent calendar digest to %s (window %s..%s)\n",
 		d.To, from.Format("2006-01-02"), to.Format("2006-01-02"))
 	return nil
+}
+
+// syncFollowupsToTodoist mirrors actionable follow-up memories into Todoist as
+// tasks tagged "darek", with their due dates. Existing tasks are updated in
+// place (keyed by memory.todoist_task_id); missing/deleted tasks are recreated.
+// Failures are logged and never abort the digest.
+func syncFollowupsToTodoist(ctx context.Context, td *todoist.Client, memStore *memory.Store, items []memory.Memory, logf func(format string, a ...any)) {
+	for _, m := range items {
+		content := m.Summary
+		description := m.Details
+		if len(m.Groups) > 0 && m.Groups[0] != "" {
+			if description != "" {
+				description += "\n"
+			}
+			description += "Group: " + m.Groups[0]
+		}
+		labels := []string{"darek"}
+
+		var dueStr string
+		if m.DueAt != nil {
+			dueStr = m.DueAt.In(time.Local).Format("2006-01-02 15:04")
+		}
+
+		// Update path: task already exists (and still exists in Todoist).
+		if m.TodoistTaskID != "" {
+			if _, err := td.GetTask(ctx, m.TodoistTaskID); err == nil {
+				duePtr := dueStr
+				contentPtr := content
+				descPtr := description
+				if _, err := td.UpdateTask(ctx, m.TodoistTaskID, todoist.UpdateRequest{
+					Content:   &contentPtr,
+					Description: &descPtr,
+					DueString: &duePtr,
+					Labels:    labels,
+				}); err != nil {
+					logf("todoist update failed for %q: %v\n", m.Summary, err)
+				}
+				continue
+			} else if !errors.Is(err, todoist.ErrNotFound) {
+				logf("todoist get failed for %q: %v\n", m.Summary, err)
+				continue
+			}
+			// Task was deleted in Todoist — fall through to recreate and
+			// clear the stale id.
+			_ = memStore.SetTodoistTaskID(ctx, m.ID, "")
+		}
+
+		task, err := td.CreateTask(ctx, todoist.CreateRequest{
+			Content:     content,
+			Description: description,
+			DueString:   dueStr,
+			Labels:      labels,
+		})
+		if err != nil {
+			logf("todoist create failed for %q: %v\n", m.Summary, err)
+			continue
+		}
+		if err := memStore.SetTodoistTaskID(ctx, m.ID, task.ID); err != nil {
+			logf("todoist store id failed for %q: %v\n", m.Summary, err)
+		}
+	}
 }
